@@ -1,0 +1,5 @@
+# python cache
+*.pyc
+
+# blender backup files in examples
+*.blend?
