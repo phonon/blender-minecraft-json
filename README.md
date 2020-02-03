@@ -1,13 +1,13 @@
 Blender Minecraft JSON Import/Export
 =======================================
-Exports cuboid geometry from Blender into Minecraft .json model format. The Blender model must follow very specific restrictions for the exporter to work (read **Export Guide** below). **Currently does not support Blender textures/UV export**.
+Import/export cuboid geometry between Blender and Minecraft .json model format. The Blender model must follow very specific restrictions for the exporter to work (read **Export Guide** below). **Currently does not support Blender textures/UV export**.
 
 Tested on Blender 2.81a.
 
 
 Installation
 ---------------------------------------
-1. `git clone ` or copy this repository into your `scripts/addons` or custom scripts folder.
+1. `git clone` or copy this repository into your `scripts/addons` or custom scripts folder.
 2. Enable in **Edit > Preferences > Add-ons** (search for *Minecraft JSON Import/Export*)
 
 
@@ -15,7 +15,7 @@ Export Guide
 ---------------------------------------
 - **Only exports cuboid objects** e.g. Object meshes must be rectangular prisms (8 vertices and 6 faces). The local mesh coordinates must be aligned to global XYZ axis. **Do not rotate the mesh vertices in edit mode.**
 - **All cuboids must be separate objects.**
-- **Apply rotations at the Object level (outside of mesh edit).** Only one axis can have a **net rotation** with 6 possible values: [-45, -22.5, 0, 22.5, 45]. What **net rotation** means is that the object can have any multiple of 90 deg rotations on any axis (because the object is still a cuboid), but only one axis can have a further rotation of values listed. Examples of valid/invalid rotations:
+- **Apply rotations at the Object level (outside of mesh edit).** Only one axis can have a **net rotation** with 5 possible degree values: [-45, -22.5, 0, 22.5, 45]. What **net rotation** means is that the object can have any multiple of 90 deg rotations on any axis (because the object is still a cuboid), but only one axis can have a further rotation of values listed. Objects with invalid rotations will be rounded to their closest valid rotation. Examples of valid/invalid rotations:
 
 |x   | y   | z  |       |
 |----|---- |----|------ |
@@ -29,6 +29,7 @@ Export Guide
 
 Example `.blend` files and generated `.json` models are in **examples** folder.
 
+
 Export Options
 ---------------------------------------
 |  Option  |  Default   | Description  |
@@ -38,17 +39,25 @@ Export Options
 |Rescale to Max| True | Rescale exported model so the largest axis fits the 48x48x48 Minecraft model volume. (Models can be scaled down but not up ingame.)
 |Texture Name| | Default texture file name for all objects|
 
+
+Import Options
+---------------------------------------
+|  Option  |  Default   | Description  |
+|----------|------------|------------- |
+| Translate by (-8, -8, -8) | False | Fixed `(-8,-8,-8)` translation to convert from Minecraft `[-16,32]` space |
+| Recenter to Origin | True | Centers model on Blender world origin (overrides translate option) |
+
+
 Minecraft Geometry Restrictions Overview
 ---------------------------------------
 Detailed overview: https://minecraft.gamepedia.com/Model
 - Uses a Y-up coordinate system (Blender uses Z-up, exporter handles the conversion).
 - Coordinates must be from [-16, 32]
-- Single axis rotations with 6 possible values: [-45, -22.5, 0, 22.5, 45]
+- Single axis rotations with 5 possible values: [-45, -22.5, 0, 22.5, 45]
 - Each face UVs specified as % of texture image area
+
 
 TODO
 ---------------------------------------
-
-- Minecraft .json import
 - Collection hierarchy export (currently no nested collections, only immediate collection exported)
-- Texture/UV export
+- Texture/UV import/export
