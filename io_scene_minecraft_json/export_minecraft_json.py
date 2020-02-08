@@ -4,6 +4,8 @@ from mathutils import Vector, Euler, Matrix
 import math
 import numpy as np
 from math import inf
+import posixpath # need '/' separator
+import os
 import json
 
 # minecraft model coordinates must be from [-16, 32] (48x48x48 volume)
@@ -34,6 +36,32 @@ ROTATIONS = [
 MAT_ROTATIONS = np.zeros((len(ROTATIONS), 3, 3))
 for i, r in enumerate(ROTATIONS):
     MAT_ROTATIONS[i,:,:] = np.array(Matrix.Rotation(math.radians(r[1]), 3, r[0]))
+
+# direction names for minecraft cube face UVs
+DIRECTIONS = np.array([
+    "north",
+    "east",
+    "west",
+    "south",
+    "up",
+    "down",
+])
+
+# normals for minecraft directions in BLENDER world space
+# e.g. blender (-1, 0, 0) is minecraft north (0, 0, -1)
+# shape (f,n,v) = (6,6,3)
+#   f = 6: number of cuboid faces to test
+#   n = 6: number of normal directions
+#   v = 3: vertex coordinates (x,y,z)
+DIRECTION_NORMALS = np.array([
+    [-1.,  0.,  0.],
+    [ 0.,  1.,  0.],
+    [ 0., -1.,  0.],
+    [ 1.,  0.,  0.],
+    [ 0.,  0.,  1.],
+    [ 0.,  0., -1.],
+])
+DIRECTION_NORMALS = np.tile(DIRECTION_NORMALS[np.newaxis,...], (6,1,1))
 
 # directed_distance: find closest distances between points 
 # in each set and sum results
@@ -80,6 +108,13 @@ def to_minecraft_axis(ax):
     elif "Z" in ax:
         return "Y"
 
+# convert blender to minecraft axis
+# X -> Z
+# Y -> X
+# Z -> Y
+def to_y_up(arr):
+    return np.array([arr[1], arr[2], arr[0]])
+
 # round to tick [-45, -22.5, 0, 22.5, 45]
 # used to handle floating point errors that cause slight
 # offsets from these ticks.
@@ -108,30 +143,68 @@ def add_to_group(groups, name, id):
     else:
         groups[name] = [id]
 
+# default color for objects with no material
+DEFAULT_COLOR = (0.0, 0.0, 0.0, 1.0)
+
+# get obj material color in index as tuple (r, g, b, a)
+def get_material_color(obj, material_index):
+    if material_index < len(obj.material_slots):
+        slot = obj.material_slots[material_index]
+        material = slot.material
+        if material is not None:
+            nodes = material.node_tree.nodes
+
+            # get first node with valid color
+            for n in nodes:
+                # principled BSDF
+                if 'Base Color' in n.inputs:
+                    color = n.inputs['Base Color'].default_value
+                    color = (color[0], color[1], color[2], color[3])
+                    return color
+                # most other materials with color
+                elif 'Color' in n.inputs:
+                    color = n.inputs['Color'].default_value
+                    color = (color[0], color[1], color[2], color[3])
+                    return color
+            
+    return DEFAULT_COLOR
+
+# main exporter function:
+# parses objects and outputs json in filepath
 def write_file(
     filepath,
     objects,
-    texture_name="",
-    texture_size=[32, 32],
     rescale_to_max = False,
     recenter_coords = True,
+    generate_texture=True,
+    texture_folder="",
+    texture_filename="",
     **kwargs):
 
     # output json model
     model_json = {
-        "texture_size": texture_size,
+        "texture_size": [16, 16], # default, will be overridden
         "textures": {
-            "0": texture_name,
-            "particle": texture_name,
+            "0": "",
+            "particle": "",
         },
     }
 
     elements = []
     groups = {}
 
+    # re-used buffers for every object
+    v_world = np.zeros((3, 8))
+    v_local = np.zeros((3, 8))
+    face_normals = np.zeros((3,6))
+    face_colors = [None for _ in range(6)]
+
     # model bounding box vector
     model_v_min = np.array([inf, inf, inf])
     model_v_max = np.array([-inf, -inf, -inf])
+
+    # all material colors from all object faces
+    model_colors = set()
 
     for obj in objects:
         mesh = obj.data
@@ -149,13 +222,9 @@ def write_file(
             continue
         
         # get world space and local mesh coordinates
-        v_world = np.zeros((3, 8))
-        v_local = np.zeros((3, 8))
         for i, v in enumerate(mesh.vertices):
             v_local[0:3,i] = v.co
             v_world[0:3,i] = mat_world @ v.co
-        
-        v_local_translated = origin[...,np.newaxis] + v_local
         
         # ================================
         # first reduce rotation to [-45, 45] by applying all 90 deg
@@ -230,11 +299,49 @@ def write_file(
         # ================================
         # output coordinate values
         # ================================
-        # change axis to minecraft format
-        v_min = np.array([v_min[1], v_min[2], v_min[0]])
-        v_max = np.array([v_max[1], v_max[2], v_max[0]])
-        origin = np.array([origin[1], origin[2], origin[0]])
+        # change axis to minecraft y-up axis
+        v_min = to_y_up(v_min)
+        v_max = to_y_up(v_max)
+        origin = to_y_up(origin)
         rot_best = (to_minecraft_axis(rot_best[0]), rot_best[1])
+        
+        # ================================
+        # texture generation
+        # ================================
+        # default face UVs
+        faces = {
+            "north": {"uv": [0, 0, 4, 4], "texture": "#0"},
+            "east": {"uv": [0, 0, 4, 4], "texture": "#0"},
+            "south": {"uv": [0, 0, 4, 4], "texture": "#0"},
+            "west": {"uv": [0, 0, 4, 4], "texture": "#0"},
+            "up": {"uv": [0, 0, 4, 4], "texture": "#0"},
+            "down": {"uv": [0, 0, 4, 4], "texture": "#0"}
+        }
+
+        # gather material colors from faces
+        if generate_texture:
+            for i, f in enumerate(mesh.polygons):
+                if i > 5: # should be 6 faces only
+                    print(f"WARNING: {obj} has >6 faces")
+                    break
+                face_normals[0:3,i] = f.normal
+                face_colors[i] = get_material_color(obj, f.material_index)
+            
+            # add face colors to overall model set
+            model_colors.update(face_colors)
+
+            # apply all 90 deg rots to face normals
+            face_normals_transformed = mat_rot_reducer @ face_normals
+
+            # reshape to (6,1,3)
+            face_normals_transformed = np.transpose(face_normals_transformed, (1,0))
+            face_normals_transformed = np.reshape(face_normals_transformed[...,np.newaxis], (6,1,3))
+
+            # get face direction strings, set face colors
+            face_directions = np.argmax(np.sum(face_normals_transformed * DIRECTION_NORMALS, axis=2), axis=1)
+            face_directions = DIRECTIONS[face_directions]
+            for i, d in enumerate(face_directions):
+                faces[d] = face_colors[i]
         
         # ================================
         # get collection
@@ -253,19 +360,12 @@ def write_file(
                 "axis": rot_best[0].lower(),
                 "origin": origin.tolist(),
             },
-            "faces": {
-                "north": {"uv": [0, 0.5, 0.5, 1], "texture": "#0"},
-                "east": {"uv": [0, 0.5, 0.5, 1], "texture": "#0"},
-                "south": {"uv": [0, 0.5, 0.5, 1], "texture": "#0"},
-                "west": {"uv": [0, 0.5, 0.5, 1], "texture": "#0"},
-                "up": {"uv": [0, 0.5, 0.5, 1], "texture": "#0"},
-                "down": {"uv": [0, 0.5, 0.5, 1], "texture": "#0"}
-            }
+            "faces": faces,
         })
     
     # tranpose model bbox to minecraft axes
-    model_v_min = np.array([model_v_min[1], model_v_min[2], model_v_min[0]])
-    model_v_max = np.array([model_v_max[1], model_v_max[2], model_v_max[0]])
+    model_v_min = to_y_up(model_v_min)
+    model_v_max = to_y_up(model_v_max)
     model_center = 0.5 * (model_v_min + model_v_max)
     
     # get rescaling factors
@@ -296,8 +396,79 @@ def write_file(
             obj["to"] = (new_origin + np.array(obj["to"])).tolist()
             obj["from"] = (new_origin + np.array(obj["from"])).tolist()
             obj["rotation"]["origin"] = (new_origin + np.array(obj["rotation"]["origin"])).tolist()
+    
+    # ===========================
+    # generate texture images
+    # ===========================
+    if generate_texture:
+        # fit textures into closest (2^n,2^n) sized texture
+        # each color takes a (3,3) pixel chunk to avoid color
+        # bleeding at UV edges seams
+        # -> get smallest n to fit all colors
+        color_grid_size = math.ceil(math.sqrt(len(model_colors))) # colors on each axis
+        tex_size = 2 ** math.ceil(math.log2(3 * color_grid_size)) # fit to (2^n, 2^n) image
 
+        # composite colors into white RGBA grid
+        tex_colors = np.ones((color_grid_size, color_grid_size, 4))
+        color_tex_uv_map = {}
+        for i, c in enumerate(model_colors):
+            tex_colors[i // color_grid_size, i % color_grid_size, :] = c
+            
+            # uvs: [x1, y1, x2, y2], each value from [0, 16] as proportion of image
+            # map each color to a uv
+            x1 = ( 3*(i % color_grid_size) + 1 ) / tex_size * 16
+            x2 = ( 3*(i % color_grid_size) + 2 ) / tex_size * 16
+            y1 = ( 3*(i // color_grid_size) + 1 ) / tex_size * 16
+            y2 = ( 3*(i // color_grid_size) + 2 ) / tex_size * 16
+            color_tex_uv_map[c] = [x1, y1, x2, y2]
+        
+        # triple colors into 3x3 pixel chunks
+        tex_colors = np.repeat(tex_colors, 3, axis=0)
+        tex_colors = np.repeat(tex_colors, 3, axis=1)
+        tex_colors = np.flip(tex_colors, axis=0)
+
+        # pixels as flattened array (for blender Image api)
+        tex_pixels = np.ones((tex_size, tex_size, 4))
+        tex_pixels[-tex_colors.shape[0]:, 0:tex_colors.shape[1], :] = tex_colors
+        tex_pixels = tex_pixels.flatten('C')
+
+        # texture output filepaths
+        if texture_filename == "":
+            current_dir = os.path.dirname(filepath)
+            filepath_name = os.path.splitext(os.path.basename(filepath))[0]
+            texture_save_path = os.path.join(current_dir, filepath_name + '.png')
+            texture_model_path = posixpath.join(texture_folder, filepath_name)
+        else:
+            current_dir = os.path.dirname(filepath)
+            texture_save_path = os.path.join(current_dir, texture_filename + '.png')
+            texture_model_path = posixpath.join(texture_folder, texture_filename)
+        
+        # create + save texture
+        tex = bpy.data.images.new("tex_colors", alpha=True, width=tex_size, height=tex_size)
+        tex.pixels = tex_pixels
+        tex.filepath_raw = texture_save_path
+        tex.file_format = 'PNG'
+        tex.save()
+
+        # re-write UVs on all elements
+        for obj in elements:
+            faces = obj["faces"]
+            for f in faces:
+                color = faces[f]
+                if isinstance(color, tuple):
+                    faces[f] = {
+                        "uv": color_tex_uv_map[color],
+                        "texture": "#0",
+                    }
+
+        # write texture info to output model
+        model_json["texture_size"] = [tex_size, tex_size]
+        model_json["textures"]["0"] = texture_model_path
+        model_json["textures"]["particle"] = texture_model_path
+
+    # ===========================
     # convert groups
+    # ===========================
     groups_export = []
     for g in groups:
         groups_export.append({
@@ -312,7 +483,7 @@ def write_file(
 
     with open(filepath, 'w') as f:
         json.dump(model_json, f)
-    
+
 def save(context,
          filepath,
          selection_only = False,
