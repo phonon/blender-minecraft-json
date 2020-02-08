@@ -1,6 +1,8 @@
 Blender Minecraft JSON Import/Export
 =======================================
-Import/export cuboid geometry between Blender and Minecraft .json model format. The Blender model must follow very specific restrictions for the exporter to work (read **Export Guide** below). **Currently does not support Blender textures/UV export**.
+Import/export cuboid geometry between Blender and Minecraft .json model format. The Blender model must follow very specific restrictions for the exporter to work (read **Export Guide** below).
+
+Currently can auto-generate and export solid material colors packed into an image texture. However, **there is no full UV editing yet.**
 
 Tested on Blender 2.81a.
 
@@ -36,8 +38,10 @@ Export Options
 |----------|------------|------------- |
 | Selection Only | False | If True, export only selected objects|
 | Recenter Coordinates | True | Recenters Blender origin `(0,0,0)` to Minecraft origin `(8,8,8)`|
-|Rescale to Max| True | Rescale exported model so the largest axis fits the 48x48x48 Minecraft model volume. (Models can be scaled down but not up ingame.)
-|Texture Name| | Default texture file name for all objects|
+| Rescale to Max | True | Rescale exported model so the largest axis fits the 48x48x48 Minecraft model volume. (Models can be scaled down but not up ingame.)
+| Generate Color Texture| True | Auto-textures solid material colors and generates a `.png` image texture exported alongside model |
+| Texture Subfolder | "item" | Subfolder for model texture path: `assets/minecraft/textures/[subfolder]` |
+| Texture Name | | Name of texture generated `[name].png` (blank defaults to `.json` filename) |
 
 
 Import Options

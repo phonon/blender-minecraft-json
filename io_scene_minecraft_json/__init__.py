@@ -76,9 +76,18 @@ class ExportMinecraftJSON(Operator, ExportHelper):
         default=True,
     )
 
-    # export texture filename
-    # TEMPORARY property until
-    # texture uv editing/export
+    generate_texture: BoolProperty(
+        name="Generate Color Texture",
+        description="Generate texture image from material colors",
+        default=True,
+    )
+
+    texture_folder: StringProperty(
+        name="Texture Subfolder",
+        description="Subfolder in resourcepack: assets/minecraft/textures/[folder]",
+        default="item",
+    )
+
     texture_name: StringProperty(
         name="Texture Name",
         description="Export texture filename, applied to all cuboids",
@@ -88,6 +97,59 @@ class ExportMinecraftJSON(Operator, ExportHelper):
     def execute(self, context):
         args = self.as_keywords()
         return export_minecraft_json.save(context, **args)
+    
+    def draw(self, context):
+        pass
+
+class JSON_PT_export_geometry(bpy.types.Panel):
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'TOOL_PROPS'
+    bl_label = "Geometry"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+        
+        return operator.bl_idname == "MINECRAFT_OT_export_json"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, 'selection_only')
+        layout.prop(operator, 'recenter_coords')
+        layout.prop(operator, 'rescale_to_max')
+
+class JSON_PT_export_textures(bpy.types.Panel):
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'TOOL_PROPS'
+    bl_label = "Textures"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+        
+        return operator.bl_idname == "MINECRAFT_OT_export_json"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, 'generate_texture')
+        layout.prop(operator, 'texture_folder')
+        layout.prop(operator, 'texture_name')
 
 # add io to menu
 def menu_func_import(self, context):
@@ -100,12 +162,13 @@ def menu_func_export(self, context):
 classes = [
     ImportMinecraftJSON,
     ExportMinecraftJSON,
+    JSON_PT_export_geometry,
+    JSON_PT_export_textures,
 ]
 
 def register():
-    from bpy.utils import register_class
     for cls in classes:
-        register_class(cls)
+        bpy.utils.register_class(cls)
 
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
@@ -115,9 +178,8 @@ def unregister():
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
 
-    from bpy.utils import unregister_class
     for cls in reversed(classes):
-        unregister_class(cls)
+        bpy.utils.unregister_class(cls)
 
 if __name__ == "__main__":
     register()
