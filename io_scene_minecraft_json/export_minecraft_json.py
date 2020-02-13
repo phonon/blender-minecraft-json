@@ -408,11 +408,21 @@ def write_file(
         color_grid_size = math.ceil(math.sqrt(len(model_colors))) # colors on each axis
         tex_size = 2 ** math.ceil(math.log2(3 * color_grid_size)) # fit to (2^n, 2^n) image
 
+        # blender interprets (r,g,b,a) in sRGB space
+        def linear_to_sRGB(l):
+            if l < 0.0031308:
+                return l * 12.92
+            else:
+                return 1.055 * (l ** (1/2.4)) - 0.055
+
         # composite colors into white RGBA grid
         tex_colors = np.ones((color_grid_size, color_grid_size, 4))
         color_tex_uv_map = {}
         for i, c in enumerate(model_colors):
-            tex_colors[i // color_grid_size, i % color_grid_size, :] = c
+            # convert color to sRGB
+            c_srgb = (linear_to_sRGB(c[0]), linear_to_sRGB(c[1]), linear_to_sRGB(c[2]), c[3])
+
+            tex_colors[i // color_grid_size, i % color_grid_size, :] = c_srgb
             
             # uvs: [x1, y1, x2, y2], each value from [0, 16] as proportion of image
             # map each color to a uv
@@ -445,9 +455,9 @@ def write_file(
         
         # create + save texture
         tex = bpy.data.images.new("tex_colors", alpha=True, width=tex_size, height=tex_size)
+        tex.file_format = 'PNG'
         tex.pixels = tex_pixels
         tex.filepath_raw = texture_save_path
-        tex.file_format = 'PNG'
         tex.save()
 
         # re-write UVs on all elements

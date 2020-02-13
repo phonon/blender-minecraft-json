@@ -28,6 +28,7 @@ Export Guide
 |30  |0    |0   | invalid (value not allowed) |
 
 - **Apply all scale to objects before exporting.** Use `ctrl + A` to bring up Apply menu then hit `Apply > Scale`. (Also found in `Object > Apply > Scale` tab in viewport)
+- **Recalculate normals if textures are on wrong faces.** Applying negative scales can sometimes flip face normals inside, which causes incorrect auto-generated texture colors. Recalculate normals on all meshes to fix (`Select All` > `Edit Mode` > `Select All` > `ctrl + shift + N` to recalculate and **uncheck inside**).
 
 Example `.blend` files and generated `.json` models are in **examples** folder.
 
