@@ -13,9 +13,12 @@ def load(context,
     
     with open(filepath, 'r') as f:
         data = json.load(f)
-    
-    groups = data['groups']
+
     elements = data['elements']
+    groups = {}
+
+    if 'groups' in data:
+        groups = data['groups']    
 
     # objects created
     objects = []
