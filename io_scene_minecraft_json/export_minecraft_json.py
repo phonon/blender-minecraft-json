@@ -179,6 +179,7 @@ def write_file(
     generate_texture=True,
     texture_folder="",
     texture_filename="",
+    export_uvs=True,
     **kwargs):
 
     # output json model
@@ -197,6 +198,7 @@ def write_file(
     v_world = np.zeros((3, 8))
     v_local = np.zeros((3, 8))
     face_normals = np.zeros((3,6))
+    face_uvs = np.zeros((6,4))
     face_colors = [None for _ in range(6)]
 
     # model bounding box vector
@@ -306,9 +308,15 @@ def write_file(
         rot_best = (to_minecraft_axis(rot_best[0]), rot_best[1])
         
         # ================================
-        # texture generation
+        # texture/uv generation
+        # 
+        # NOTE: BLENDER VS MINECRAFT UV AXIS
+        # - blender: uvs origin is bottom-left (0,0) to top-right (1, 1)
+        # - minecraft: uvs origin is top-left (0,0) to bottom-right (16, 16)
+        # minecraft uvs: [x1, y1, x2, y2], each value from [0, 16] as proportion of image
         # ================================
-        # default face UVs
+
+        # initialize faces
         faces = {
             "north": {"uv": [0, 0, 4, 4], "texture": "#0"},
             "east": {"uv": [0, 0, 4, 4], "texture": "#0"},
@@ -317,32 +325,53 @@ def write_file(
             "up": {"uv": [0, 0, 4, 4], "texture": "#0"},
             "down": {"uv": [0, 0, 4, 4], "texture": "#0"}
         }
+        
+        uv_layer = mesh.uv_layers.active.data
 
-        # gather material colors from faces
+        for i, face in enumerate(mesh.polygons):
+            if i > 5: # should be 6 faces only
+                print(f"WARNING: {obj} has >6 faces")
+                break
+            face_normals[0:3,i] = face.normal
+            face_colors[i] = get_material_color(obj, face.material_index)
+
+            for k, loop_index in enumerate(range(face.loop_start, face.loop_start + face.loop_total)):
+                if k == 0: # uv_max
+                    uv_max = uv_layer[loop_index].uv
+                    face_uvs[i][2] = uv_max[0]
+                    face_uvs[i][3] = uv_max[1]
+                if k == 2: # uv_min
+                    uv_min = uv_layer[loop_index].uv
+                    face_uvs[i][0] = uv_min[0]
+                    face_uvs[i][1] = uv_min[1]
+
+        # add face colors to overall model set
+        model_colors.update(face_colors)
+
+        # apply all 90 deg rots to face normals
+        face_normals_transformed = mat_rot_reducer @ face_normals
+
+        # reshape to (6,1,3)
+        face_normals_transformed = np.transpose(face_normals_transformed, (1,0))
+        face_normals_transformed = np.reshape(face_normals_transformed[...,np.newaxis], (6,1,3))
+
+        # get face direction strings, set face colors
+        face_directions = np.argmax(np.sum(face_normals_transformed * DIRECTION_NORMALS, axis=2), axis=1)
+        face_directions = DIRECTIONS[face_directions]
+
+        # replace faces with material colors
         if generate_texture:
-            for i, f in enumerate(mesh.polygons):
-                if i > 5: # should be 6 faces only
-                    print(f"WARNING: {obj} has >6 faces")
-                    break
-                face_normals[0:3,i] = f.normal
-                face_colors[i] = get_material_color(obj, f.material_index)
-            
-            # add face colors to overall model set
-            model_colors.update(face_colors)
-
-            # apply all 90 deg rots to face normals
-            face_normals_transformed = mat_rot_reducer @ face_normals
-
-            # reshape to (6,1,3)
-            face_normals_transformed = np.transpose(face_normals_transformed, (1,0))
-            face_normals_transformed = np.reshape(face_normals_transformed[...,np.newaxis], (6,1,3))
-
-            # get face direction strings, set face colors
-            face_directions = np.argmax(np.sum(face_normals_transformed * DIRECTION_NORMALS, axis=2), axis=1)
-            face_directions = DIRECTIONS[face_directions]
             for i, d in enumerate(face_directions):
                 faces[d] = face_colors[i]
-        
+        # set uvs
+        elif export_uvs:
+            for i, d in enumerate(face_directions):
+                xmin = face_uvs[i][0] * 16
+                ymin = (1.0 - face_uvs[i][1]) * 16
+                xmax = face_uvs[i][2] * 16
+                ymax = (1.0 - face_uvs[i][3]) * 16
+                faces[d]["uv"] = [ xmin, ymin, xmax, ymax ]
+
         # ================================
         # get collection
         # ================================
@@ -409,11 +438,11 @@ def write_file(
         tex_size = 2 ** math.ceil(math.log2(3 * color_grid_size)) # fit to (2^n, 2^n) image
 
         # blender interprets (r,g,b,a) in sRGB space
-        def linear_to_sRGB(l):
-            if l < 0.0031308:
-                return l * 12.92
+        def linear_to_sRGB(v):
+            if v < 0.0031308:
+                return v * 12.92
             else:
-                return 1.055 * (l ** (1/2.4)) - 0.055
+                return 1.055 * (v ** (1/2.4)) - 0.055
 
         # composite colors into white RGBA grid
         tex_colors = np.ones((color_grid_size, color_grid_size, 4))
