@@ -40,9 +40,10 @@ Export Options
 | Selection Only | False | If True, export only selected objects|
 | Recenter Coordinates | True | Recenters Blender origin `(0,0,0)` to Minecraft origin `(8,8,8)`|
 | Rescale to Max | True | Rescale exported model so the largest axis fits the 48x48x48 Minecraft model volume. (Models can be scaled down but not up ingame.)
-| Generate Color Texture| True | Auto-textures solid material colors and generates a `.png` image texture exported alongside model |
 | Texture Subfolder | "item" | Subfolder for model texture path: `assets/minecraft/textures/[subfolder]` |
 | Texture Name | | Name of texture generated `[name].png` (blank defaults to `.json` filename) |
+| Export UVs | True | Exports face UVs |
+| Generate Color Texture| True | Auto-textures solid material colors and generates a `.png` image texture exported alongside model (overwrites UVs) |
 
 
 Import Options
@@ -65,4 +66,4 @@ Detailed overview: https://minecraft.gamepedia.com/Model
 TODO
 ---------------------------------------
 - Collection hierarchy export (currently no nested collections, only immediate collection exported)
-- Texture/UV import/export
+- Texture/UV import

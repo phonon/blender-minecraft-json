@@ -76,12 +76,6 @@ class ExportMinecraftJSON(Operator, ExportHelper):
         default=True,
     )
 
-    generate_texture: BoolProperty(
-        name="Generate Color Texture",
-        description="Generate texture image from material colors",
-        default=True,
-    )
-
     texture_folder: StringProperty(
         name="Texture Subfolder",
         description="Subfolder in resourcepack: assets/minecraft/textures/[folder]",
@@ -92,6 +86,18 @@ class ExportMinecraftJSON(Operator, ExportHelper):
         name="Texture Name",
         description="Export texture filename, applied to all cuboids",
         default="",
+    )
+
+    export_uvs: BoolProperty(
+        name="Export UVs",
+        description="Export UVs",
+        default=True,
+    )
+    
+    generate_texture: BoolProperty(
+        name="Generate Color Texture",
+        description="Generate texture image from material colors",
+        default=True,
     )
 
     def execute(self, context):
@@ -147,9 +153,10 @@ class JSON_PT_export_textures(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
-        layout.prop(operator, 'generate_texture')
         layout.prop(operator, 'texture_folder')
         layout.prop(operator, 'texture_name')
+        layout.prop(operator, 'export_uvs')
+        layout.prop(operator, 'generate_texture')
 
 # add io to menu
 def menu_func_import(self, context):
