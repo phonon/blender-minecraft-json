@@ -2,7 +2,7 @@ Blender Minecraft JSON Import/Export
 =======================================
 Import/export cuboid geometry between Blender and Minecraft .json model format. The Blender model must follow very specific restrictions for the exporter to work (read **Export Guide** below).
 
-Currently can auto-generate and export solid material colors packed into an image texture. However, **there is no full UV editing yet.**
+Currently can auto-generate and export solid material colors packed into an image texture. **There is UV export but no import, and export does not write the texture files to header yet.**
 
 Tested on Blender 2.81a.
 
@@ -39,7 +39,7 @@ Export Options
 |----------|------------|------------- |
 | Selection Only | False | If True, export only selected objects|
 | Recenter Coordinates | True | Recenters Blender origin `(0,0,0)` to Minecraft origin `(8,8,8)`|
-| Rescale to Max | True | Rescale exported model so the largest axis fits the 48x48x48 Minecraft model volume. (Models can be scaled down but not up ingame.)
+| Rescale to Max | True | Rescale exported model so the largest axis fits the 48x48x48 Minecraft model volume.
 | Texture Subfolder | "item" | Subfolder for model texture path: `assets/minecraft/textures/[subfolder]` |
 | Texture Name | | Name of texture generated `[name].png` (blank defaults to `.json` filename) |
 | Export UVs | True | Exports face UVs |
@@ -60,8 +60,8 @@ Detailed overview: https://minecraft.gamepedia.com/Model
 - Uses a Y-up coordinate system (Blender uses Z-up, exporter handles the conversion).
 - Coordinates must be from [-16, 32]
 - Single axis rotations with 5 possible values: [-45, -22.5, 0, 22.5, 45]
-- Each face UVs specified as % of texture image area
-
+- Minecraft UV axis is top-left (0, 0) to bottom-right (16, 16) while Blender is bottom-left (0, 0) to top-right (1, 1)  
+- Each face UVs specified as in format [xmin, ymin, xmax, ymax] where each value in range [0, 16]
 
 TODO
 ---------------------------------------
