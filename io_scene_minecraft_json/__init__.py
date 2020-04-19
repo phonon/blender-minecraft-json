@@ -79,7 +79,7 @@ class ExportMinecraftJSON(Operator, ExportHelper):
     texture_folder: StringProperty(
         name="Texture Subfolder",
         description="Subfolder in resourcepack: assets/minecraft/textures/[folder]",
-        default="items",
+        default="item",
     )
 
     texture_name: StringProperty(
