@@ -1,7 +1,7 @@
 import bpy
 import math
 
-# octagonal:
+# solid octagonal:
 #    _
 #  /   \     height = (1 + sqrt(2)) * edge 
 # |     |
@@ -80,6 +80,61 @@ class PrimitiveAddOctagonalHollow(bpy.types.Operator):
         
         return {'FINISHED'}
 
+# solid hexadecagon (16-sided polygon) (uses 8 cuboids)
+# height = sin(7pi/16) / sin(pi/16) * edge
+class PrimitiveAddHexadecagon(bpy.types.Operator):
+    bl_idname = "minecraft.primitive_add_hexadecagon"
+    bl_label = "Add Hexadecagon (8 Cuboids)"
+
+    def execute(self, context):
+        size_outer_half_extent = 1
+        thick = size_outer_half_extent * math.sin(math.pi / 16.0) / math.sin(7.0 * math.pi / 16)
+
+        cubes = []
+
+        for i in range(0,16):
+            bpy.ops.mesh.primitive_cube_add()
+            cube = bpy.context.active_object
+            bpy.ops.transform.resize(value=(1, 1, thick))
+            bpy.ops.object.transform_apply(location=False, scale=True, rotation=False)
+            bpy.ops.transform.rotate(value=i * math.pi/8, orient_axis='Y')
+            cubes.append(cube)
+
+        # select all
+        for c in cubes:
+            c.select_set(True)
+        
+        return {'FINISHED'}
+
+# hollow hexadecagon (16-sided polygon) (uses 16 cuboids)
+# height = sin(7pi/16) / sin(pi/16) * edge
+class PrimitiveAddHexadecagonHollow(bpy.types.Operator):
+    bl_idname = "minecraft.primitive_add_hexadecagon_hollow"
+    bl_label = "Add Hollow Hexadecagon (16 Cuboids)"
+
+    def execute(self, context):
+        size_outer_half_extent = 1
+        size_inner_half_extent = 0.7
+        edge = size_outer_half_extent * math.sin(math.pi / 16.0) / math.sin(7.0 * math.pi / 16)
+        thick = 0.5 * (size_outer_half_extent - size_inner_half_extent)
+
+        cubes = []
+
+        for i in range(0,16):
+            bpy.ops.mesh.primitive_cube_add()
+            cube = bpy.context.active_object
+            bpy.ops.transform.resize(value=(edge, 1, thick))
+            bpy.ops.transform.translate(value=(0, 0, size_outer_half_extent - thick))
+            bpy.ops.object.transform_apply(location=True, scale=True, rotation=False)
+            bpy.ops.transform.rotate(value=i * math.pi/8, orient_axis='Y')
+            cubes.append(cube)
+
+        # select all
+        for c in cubes:
+            c.select_set(True)
+        
+        return {'FINISHED'}
+
 class VIEW3D_MT_minecraft_submenu(bpy.types.Menu):
     bl_idname = "VIEW3D_MT_minecraft_submenu"
     bl_label = "Minecraft"
@@ -94,6 +149,14 @@ class VIEW3D_MT_minecraft_submenu(bpy.types.Menu):
             PrimitiveAddOctagonalHollow.bl_idname,
             text="Octagonal (Hollow)",
             icon="MESH_TORUS")
+        layout.operator(
+            PrimitiveAddHexadecagon.bl_idname,
+            text="Hexadecagon",
+            icon="MESH_CYLINDER")
+        layout.operator(
+            PrimitiveAddHexadecagonHollow.bl_idname,
+            text="Hexadecagon (Hollow)",
+            icon="MESH_TORUS")
     
 def add_submenu(self, context):
     self.layout.separator()
@@ -103,6 +166,8 @@ def add_submenu(self, context):
 classes = [
     PrimitiveAddOctagonal,
     PrimitiveAddOctagonalHollow,
+    PrimitiveAddHexadecagon,
+    PrimitiveAddHexadecagonHollow,
     VIEW3D_MT_minecraft_submenu,
 ]
 
