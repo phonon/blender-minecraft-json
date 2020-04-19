@@ -186,8 +186,7 @@ def write_file(
     model_json = {
         "texture_size": [16, 16], # default, will be overridden
         "textures": {
-            "0": "",
-            "particle": "",
+            "0": ""
         },
     }
 
@@ -503,7 +502,6 @@ def write_file(
         # write texture info to output model
         model_json["texture_size"] = [tex_size, tex_size]
         model_json["textures"]["0"] = texture_model_path
-        model_json["textures"]["particle"] = texture_model_path
 
     # ===========================
     # convert groups
