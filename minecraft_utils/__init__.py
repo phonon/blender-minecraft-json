@@ -14,33 +14,23 @@ class PrimitiveAddOctagonal(bpy.types.Operator):
         size = 1
         edge = size / (1 + math.sqrt(2))
 
+        # transform for each part in form (scale),[(rotate1), (rotate2), ...]
+        transforms = [
+            ( (edge, 1, 1), None ),
+            ( (1, 1, edge), None ),
+            ( (edge, 1, 1), ('Y', math.pi/4) ),
+            ( (edge, 1, 1), ('Y', -math.pi/4) ),
+        ]
+
         cubes = []
-
-        bpy.ops.mesh.primitive_cube_add()
-        cube = bpy.context.active_object
-        bpy.ops.transform.resize(value=(edge, 1, 1))
-        bpy.ops.object.transform_apply(location=False, scale=True, rotation=False)
-        cubes.append(cube)
-
-        bpy.ops.mesh.primitive_cube_add()
-        cube = bpy.context.active_object
-        bpy.ops.transform.resize(value=(1, 1, edge))
-        bpy.ops.object.transform_apply(location=False, scale=True, rotation=False)
-        cubes.append(cube)
-
-        bpy.ops.mesh.primitive_cube_add()
-        cube = bpy.context.active_object
-        bpy.ops.transform.resize(value=(edge, 1, 1))
-        bpy.ops.transform.rotate(value=math.pi/4, orient_axis='Y')
-        bpy.ops.object.transform_apply(location=False, scale=True, rotation=False)
-        cubes.append(cube)
-
-        bpy.ops.mesh.primitive_cube_add()
-        cube = bpy.context.active_object
-        bpy.ops.transform.resize(value=(edge, 1, 1))
-        bpy.ops.transform.rotate(value=-math.pi/4, orient_axis='Y')
-        bpy.ops.object.transform_apply(location=False, scale=True, rotation=False)
-        cubes.append(cube)
+        for scale, rotation in transforms:
+            bpy.ops.mesh.primitive_cube_add()
+            cube = bpy.context.active_object
+            bpy.ops.transform.resize(value=scale)
+            if rotation is not None:
+                bpy.ops.transform.rotate(value=rotation[1], orient_axis=rotation[0])
+            bpy.ops.object.transform_apply(location=False, scale=True, rotation=False)
+            cubes.append(cube)
 
         # select all
         for c in cubes:
@@ -135,6 +125,49 @@ class PrimitiveAddHexadecagonHollow(bpy.types.Operator):
         
         return {'FINISHED'}
 
+# Sphere-estimate based on octagonal on each axis
+#    __      top part is scaled to be square (edge x edge)
+#   /_/ \
+#  /|_|\     height = (1 + sqrt(2)) * edge 
+# |_|_|_|
+#  \|_|/
+class PrimitiveAddOctsphere(bpy.types.Operator):
+    bl_idname = "minecraft.primitive_add_octsphere"
+    bl_label = "Add Octsphere"
+
+    def execute(self, context):
+        size = 1
+        edge = size / (1 + math.sqrt(2))
+
+        # transform for each part in form (scale),[(rotate1), (rotate2), ...]
+        transforms = [
+            ( (edge, edge, 1), None ),
+            ( (1, edge, edge), None ),
+            ( (edge, 1, edge), None ),
+            ( (edge, 1, edge), ('X', math.pi/4) ),
+            ( (edge, 1, edge), ('X', -math.pi/4) ),
+            ( (edge, edge, 1), ('Y', math.pi/4) ),
+            ( (edge, edge, 1), ('Y', -math.pi/4) ),
+            ( (1, edge, edge), ('Z', math.pi/4) ),
+            ( (1, edge, edge), ('Z', -math.pi/4) ),
+        ]
+
+        cubes = []
+        for scale, rotation in transforms:
+            bpy.ops.mesh.primitive_cube_add()
+            cube = bpy.context.active_object
+            bpy.ops.transform.resize(value=scale)
+            if rotation is not None:
+                bpy.ops.transform.rotate(value=rotation[1], orient_axis=rotation[0])
+            bpy.ops.object.transform_apply(location=False, scale=True, rotation=False)
+            cubes.append(cube)
+
+        # select all
+        for c in cubes:
+            c.select_set(True)
+        
+        return {'FINISHED'}
+    
 class VIEW3D_MT_minecraft_submenu(bpy.types.Menu):
     bl_idname = "VIEW3D_MT_minecraft_submenu"
     bl_label = "Minecraft"
@@ -157,6 +190,10 @@ class VIEW3D_MT_minecraft_submenu(bpy.types.Menu):
             PrimitiveAddHexadecagonHollow.bl_idname,
             text="Hexadecagon (Hollow)",
             icon="MESH_TORUS")
+        layout.operator(
+            PrimitiveAddOctsphere.bl_idname,
+            text="Octsphere",
+            icon="MESH_UVSPHERE")
     
 def add_submenu(self, context):
     self.layout.separator()
@@ -168,6 +205,7 @@ classes = [
     PrimitiveAddOctagonalHollow,
     PrimitiveAddHexadecagon,
     PrimitiveAddHexadecagonHollow,
+    PrimitiveAddOctsphere,
     VIEW3D_MT_minecraft_submenu,
 ]
 
