@@ -2,7 +2,7 @@ Blender Minecraft JSON Import/Export
 =======================================
 Import/export cuboid geometry between Blender and Minecraft .json model format. The Blender model must follow very specific restrictions for the exporter to work (read **Export Guide** below).
 
-Currently can auto-generate and export solid material colors packed into an image texture. **There is UV export but no import, and export does not write the texture files to header yet.**
+Supports import/export uvs and can also auto-generate and export solid material colors packed into an image texture.
 
 Tested on Blender 2.83.
 
@@ -51,6 +51,7 @@ Import Options
 ---------------------------------------
 |  Option  |  Default   | Description  |
 |----------|------------|------------- |
+| Import UVs | True | Import face UVs |
 | Translate by (-8, -8, -8) | False | Fixed `(-8,-8,-8)` translation to convert from Minecraft `[-16,32]` space |
 | Recenter to Origin | True | Centers model on Blender world origin (overrides translate option) |
 
@@ -67,4 +68,3 @@ Detailed overview: https://minecraft.gamepedia.com/Model
 TODO
 ---------------------------------------
 - Collection hierarchy export (currently no nested collections, only immediate collection exported)
-- Texture/UV import
