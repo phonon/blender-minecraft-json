@@ -169,6 +169,25 @@ def get_material_color(obj, material_index):
             
     return DEFAULT_COLOR
 
+# detect if uv loop direction from mesh uv_layer and start index, returns
+# True - clockwise
+# False - counterclockwise
+def uv_loop_is_clockwise(uv_layer, loop_start):
+    face_uv_0 = uv_layer[loop_start].uv
+    face_uv_1 = uv_layer[loop_start+1].uv
+    face_uv_2 = uv_layer[loop_start+2].uv
+    face_uv_3 = uv_layer[loop_start+3].uv
+
+    # use polygon winding to detect if uv loop order is clockwise or counterclockwise
+    area = (face_uv_1.x - face_uv_0.x) * (face_uv_1.y - face_uv_0.y)
+    area += (face_uv_2.x - face_uv_1.x) * (face_uv_2.y - face_uv_1.y)
+    area += (face_uv_3.x - face_uv_2.x) * (face_uv_3.y - face_uv_2.y)
+    area += (face_uv_0.x - face_uv_3.x) * (face_uv_0.y - face_uv_3.y)
+
+    # clockwise if area positive
+    return area > 0
+
+
 # main exporter function:
 # parses objects and outputs json in filepath
 def write_file(
@@ -216,7 +235,6 @@ def write_file(
         
         # object properties
         origin = np.array(obj.location)
-        scale = np.array(obj.scale)
         mat_world = obj.matrix_world
         
         # count number of vertices, ignore if not cuboid
@@ -336,15 +354,23 @@ def write_file(
             face_normals[0:3,i] = face.normal
             face_colors[i] = get_material_color(obj, face.material_index)
 
-            for k, loop_index in enumerate(range(face.loop_start, face.loop_start + face.loop_total)):
-                if k == 0: # uv_max
-                    uv_max = uv_layer[loop_index].uv
-                    face_uvs[i][2] = uv_max[0]
-                    face_uvs[i][3] = uv_max[1]
-                if k == 2: # uv_min
-                    uv_min = uv_layer[loop_index].uv
-                    face_uvs[i][0] = uv_min[0]
-                    face_uvs[i][1] = uv_min[1]
+            # determine min/max corners of uv loop
+            loop_start = face.loop_start
+            face_uv_0 = uv_layer[loop_start].uv
+            face_uv_2 = uv_layer[loop_start+2].uv
+
+            # set uv min/max depending on clockwise or counterclockwise order
+            if uv_loop_is_clockwise(uv_layer, loop_start):
+                uv_min = face_uv_0
+                uv_max = face_uv_2
+            else:
+                uv_min = face_uv_2
+                uv_max = face_uv_0
+            
+            face_uvs[i][0] = uv_min[0]
+            face_uvs[i][1] = uv_min[1]
+            face_uvs[i][2] = uv_max[0]
+            face_uvs[i][3] = uv_max[1]
 
         # add face colors to overall model set
         model_colors.update(face_colors)

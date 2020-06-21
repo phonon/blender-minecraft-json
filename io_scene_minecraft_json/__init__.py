@@ -17,6 +17,7 @@ class ImportMinecraftJSON(Operator, ImportHelper):
     """Import Minecraft .json file"""
     bl_idname = "minecraft.import_json"
     bl_label = "Import a Minecraft .json model"
+    bl_options = {"REGISTER", "UNDO"}
 
     # ImportHelper mixin class uses this
     filename_ext = ".json"
@@ -25,6 +26,12 @@ class ImportMinecraftJSON(Operator, ImportHelper):
         default="*.json",
         options={"HIDDEN"},
         maxlen=255,  # Max internal buffer length, longer would be clamped.
+    )
+
+    import_uvs: BoolProperty(
+        name="Import UVs",
+        description="Import UVs",
+        default=True,
     )
 
     # applies default shift from minecraft origin
