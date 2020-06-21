@@ -82,7 +82,7 @@ class ExportMinecraftJSON(Operator, ExportHelper):
         default="item",
     )
 
-    texture_name: StringProperty(
+    texture_filename: StringProperty(
         name="Texture Name",
         description="Export texture filename, applied to all cuboids",
         default="",
@@ -154,7 +154,7 @@ class JSON_PT_export_textures(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.prop(operator, 'texture_folder')
-        layout.prop(operator, 'texture_name')
+        layout.prop(operator, 'texture_filename')
         layout.prop(operator, 'export_uvs')
         layout.prop(operator, 'generate_texture')
 

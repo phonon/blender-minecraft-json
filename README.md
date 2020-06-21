@@ -4,7 +4,7 @@ Import/export cuboid geometry between Blender and Minecraft .json model format. 
 
 Currently can auto-generate and export solid material colors packed into an image texture. **There is UV export but no import, and export does not write the texture files to header yet.**
 
-Tested on Blender 2.81a.
+Tested on Blender 2.83.
 
 
 Installation
