@@ -9,6 +9,7 @@ import math
 class PrimitiveAddOctagonal(bpy.types.Operator):
     bl_idname = "minecraft.primitive_add_octagonal"
     bl_label = "Add Octagonal (4 Cuboids)"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         size = 1
@@ -46,6 +47,7 @@ class PrimitiveAddOctagonal(bpy.types.Operator):
 class PrimitiveAddOctagonalHollow(bpy.types.Operator):
     bl_idname = "minecraft.primitive_add_octagonal_hollow"
     bl_label = "Add Hollow Octagonal (8 Cuboids)"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         size_outer_half_extent = 1
@@ -75,6 +77,7 @@ class PrimitiveAddOctagonalHollow(bpy.types.Operator):
 class PrimitiveAddHexadecagon(bpy.types.Operator):
     bl_idname = "minecraft.primitive_add_hexadecagon"
     bl_label = "Add Hexadecagon (8 Cuboids)"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         size_outer_half_extent = 1
@@ -101,6 +104,7 @@ class PrimitiveAddHexadecagon(bpy.types.Operator):
 class PrimitiveAddHexadecagonHollow(bpy.types.Operator):
     bl_idname = "minecraft.primitive_add_hexadecagon_hollow"
     bl_label = "Add Hollow Hexadecagon (16 Cuboids)"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         size_outer_half_extent = 1
@@ -134,6 +138,7 @@ class PrimitiveAddHexadecagonHollow(bpy.types.Operator):
 class PrimitiveAddOctsphere(bpy.types.Operator):
     bl_idname = "minecraft.primitive_add_octsphere"
     bl_label = "Add Octsphere"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         size = 1

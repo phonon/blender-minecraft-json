@@ -502,7 +502,13 @@ def write_file(
         # write texture info to output model
         model_json["texture_size"] = [tex_size, tex_size]
         model_json["textures"]["0"] = texture_model_path
-
+    
+    # if not generating texture, just write texture path to json file
+    # TODO: scan materials for textures, then update output size
+    elif texture_filename != "":
+        model_json["texture_size"] = [16, 16]
+        model_json["textures"]["0"] = posixpath.join(texture_folder, texture_filename)
+    
     # ===========================
     # convert groups
     # ===========================
@@ -520,6 +526,7 @@ def write_file(
 
     with open(filepath, 'w') as f:
         json.dump(model_json, f)
+
 
 def save(context,
          filepath,
