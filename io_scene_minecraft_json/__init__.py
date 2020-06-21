@@ -2,7 +2,7 @@
 # invoke() function which calls the file selector.
 import bpy
 from bpy_extras.io_utils import ImportHelper, ExportHelper
-from bpy.props import StringProperty, BoolProperty, EnumProperty
+from bpy.props import StringProperty, BoolProperty, EnumProperty, IntProperty
 from bpy.types import Operator
 
 from . import export_minecraft_json
@@ -23,7 +23,7 @@ class ImportMinecraftJSON(Operator, ImportHelper):
 
     filter_glob: StringProperty(
         default="*.json",
-        options={'HIDDEN'},
+        options={"HIDDEN"},
         maxlen=255,  # Max internal buffer length, longer would be clamped.
     )
 
@@ -44,6 +44,7 @@ class ImportMinecraftJSON(Operator, ImportHelper):
         args = self.as_keywords()
         return import_minecraft_json.load(context, **args)
 
+
 class ExportMinecraftJSON(Operator, ExportHelper):
     """Exports scene cuboids as minecraft .json object"""
     bl_idname = "minecraft.export_json"
@@ -54,7 +55,7 @@ class ExportMinecraftJSON(Operator, ExportHelper):
 
     filter_glob: StringProperty(
         default="*.json",
-        options={'HIDDEN'},
+        options={"HIDDEN"},
         maxlen=255,  # Max internal buffer length, longer would be clamped.
     )
 
@@ -76,6 +77,8 @@ class ExportMinecraftJSON(Operator, ExportHelper):
         default=True,
     )
 
+    # ================================
+    # texture options
     texture_folder: StringProperty(
         name="Texture Subfolder",
         description="Subfolder in resourcepack: assets/minecraft/textures/[folder]",
@@ -100,6 +103,24 @@ class ExportMinecraftJSON(Operator, ExportHelper):
         default=True,
     )
 
+    # ================================
+    # minify options
+    minify: BoolProperty(
+        name="Minify .json",
+        description="Enables minification options to reduce .json file size",
+        default=False,
+    )
+
+    decimal_precision: IntProperty(
+        name="Decimal Precision",
+        description="Number of digits after decimal point (use -1 to disable)",
+        min=-1,
+        max=16,
+        soft_min=-1,
+        soft_max=16,
+        default=8,
+    )
+
     def execute(self, context):
         args = self.as_keywords()
         return export_minecraft_json.save(context, **args)
@@ -107,9 +128,11 @@ class ExportMinecraftJSON(Operator, ExportHelper):
     def draw(self, context):
         pass
 
+
+# export options panel for geometry
 class JSON_PT_export_geometry(bpy.types.Panel):
-    bl_space_type = 'FILE_BROWSER'
-    bl_region_type = 'TOOL_PROPS'
+    bl_space_type = "FILE_BROWSER"
+    bl_region_type = "TOOL_PROPS"
     bl_label = "Geometry"
     bl_parent_id = "FILE_PT_operator"
 
@@ -117,7 +140,6 @@ class JSON_PT_export_geometry(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-        
         return operator.bl_idname == "MINECRAFT_OT_export_json"
 
     def draw(self, context):
@@ -128,13 +150,15 @@ class JSON_PT_export_geometry(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
-        layout.prop(operator, 'selection_only')
-        layout.prop(operator, 'recenter_coords')
-        layout.prop(operator, 'rescale_to_max')
+        layout.prop(operator, "selection_only")
+        layout.prop(operator, "recenter_coords")
+        layout.prop(operator, "rescale_to_max")
 
+
+# export options panel for textures
 class JSON_PT_export_textures(bpy.types.Panel):
-    bl_space_type = 'FILE_BROWSER'
-    bl_region_type = 'TOOL_PROPS'
+    bl_space_type = "FILE_BROWSER"
+    bl_region_type = "TOOL_PROPS"
     bl_label = "Textures"
     bl_parent_id = "FILE_PT_operator"
 
@@ -142,7 +166,6 @@ class JSON_PT_export_textures(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-        
         return operator.bl_idname == "MINECRAFT_OT_export_json"
 
     def draw(self, context):
@@ -153,10 +176,36 @@ class JSON_PT_export_textures(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
 
-        layout.prop(operator, 'texture_folder')
-        layout.prop(operator, 'texture_filename')
-        layout.prop(operator, 'export_uvs')
-        layout.prop(operator, 'generate_texture')
+        layout.prop(operator, "texture_folder")
+        layout.prop(operator, "texture_filename")
+        layout.prop(operator, "export_uvs")
+        layout.prop(operator, "generate_texture")
+
+
+# export options panel for minifying .json output
+class JSON_PT_export_minify(bpy.types.Panel):
+    bl_space_type = "FILE_BROWSER"
+    bl_region_type = "TOOL_PROPS"
+    bl_label = "Minify"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+        return operator.bl_idname == "MINECRAFT_OT_export_json"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, "minify")
+        layout.prop(operator, "decimal_precision")
+
 
 # add io to menu
 def menu_func_import(self, context):
@@ -171,6 +220,7 @@ classes = [
     ExportMinecraftJSON,
     JSON_PT_export_geometry,
     JSON_PT_export_textures,
+    JSON_PT_export_minify,
 ]
 
 def register():

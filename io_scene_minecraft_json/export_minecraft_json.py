@@ -180,6 +180,8 @@ def write_file(
     texture_folder="",
     texture_filename="",
     export_uvs=True,
+    minify=False,            # minimize output .json size
+    decimal_precision=-1,    # float decimal precision (used if minify=True, -1 to disable)
     **kwargs):
 
     # output json model
@@ -524,8 +526,23 @@ def write_file(
     model_json["elements"] = elements
     model_json["groups"] = groups_export
 
+    # minification options to reduce .json file size
+    if minify == True:
+        # go through json dict and replace all float with rounded strings
+        if decimal_precision >= 0:
+            def round_float(x):
+                return round(x, decimal_precision)
+            
+            for elem in model_json["elements"]:
+                elem["from"] = [round_float(x) for x in elem["from"]]
+                elem["to"] = [round_float(x) for x in elem["to"]]
+                elem["rotation"]["origin"] = [round_float(x) for x in elem["rotation"]["origin"]]
+                for face in elem["faces"].values():
+                    face["uv"] = [round_float(x) for x in face["uv"]]
+    
+    # save json
     with open(filepath, 'w') as f:
-        json.dump(model_json, f)
+        json.dump(model_json, f, separators=(",", ":"))
 
 
 def save(context,

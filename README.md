@@ -44,7 +44,8 @@ Export Options
 | Texture Name | | Name of texture generated `[name].png` (blank defaults to `.json` filename) |
 | Export UVs | True | Exports face UVs |
 | Generate Color Texture| True | Auto-textures solid material colors and generates a `.png` image texture exported alongside model (overwrites UVs) |
-
+| Minify .json | False | Enable options to reduce .json file size |
+| Decimal Precision | 8 | Number of digits after decimal point in output .json (-1 to disable) |
 
 Import Options
 ---------------------------------------
