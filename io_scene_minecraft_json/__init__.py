@@ -6,11 +6,13 @@ from bpy.props import StringProperty, BoolProperty, EnumProperty, IntProperty
 from bpy.types import Operator
 
 from . import export_minecraft_json
+from . import export_minecraft_json_by_bones
 from . import import_minecraft_json
 
 # reload imported modules
 import importlib
 importlib.reload(export_minecraft_json) 
+importlib.reload(export_minecraft_json_by_bones) 
 importlib.reload(import_minecraft_json)
 
 class ImportMinecraftJSON(Operator, ImportHelper):
@@ -72,15 +74,21 @@ class ExportMinecraftJSON(Operator, ExportHelper):
         default=False,
     )
 
-    recenter_coords: BoolProperty(
-        name="Recenter Coordinates",
-        description="Recenter model in [-16, 32] so origin = (8,8,8)",
+    translate_coords: BoolProperty(
+        name="Translate Coordinates",
+        description="Translate into [-16, 32] space so origin = (8,8,8)",
         default=True,
     )
 
     rescale_to_max: BoolProperty(
         name="Rescale to Max",
         description="Rescale model to fit entire volume [-16, 32]",
+        default=True,
+    )
+
+    recenter_to_origin: BoolProperty(
+        name="Recenter Model to Origin",
+        description="Recenter model so its center is at the origin",
         default=True,
     )
 
@@ -107,7 +115,7 @@ class ExportMinecraftJSON(Operator, ExportHelper):
     generate_texture: BoolProperty(
         name="Generate Color Texture",
         description="Generate texture image from material colors",
-        default=True,
+        default=False,
     )
 
     # ================================
@@ -128,9 +136,26 @@ class ExportMinecraftJSON(Operator, ExportHelper):
         default=8,
     )
 
+    # ================================
+    # animation options EXPERIMENTAL
+    export_bones: BoolProperty(
+        name="Export bones",
+        description="Export model in clusters attached to bones",
+        default=False,
+    )
+
+    export_animation: BoolProperty(
+        name="Export animations",
+        description="Export bone animation keyframes into .json file",
+        default=False,
+    )
+
     def execute(self, context):
         args = self.as_keywords()
-        return export_minecraft_json.save(context, **args)
+        if args["export_bones"] == True or args["export_animation"] == True:
+            return export_minecraft_json_by_bones.save(context, **args)
+        else:
+            return export_minecraft_json.save(context, **args)
     
     def draw(self, context):
         pass
@@ -158,8 +183,9 @@ class JSON_PT_export_geometry(bpy.types.Panel):
         operator = sfile.active_operator
 
         layout.prop(operator, "selection_only")
-        layout.prop(operator, "recenter_coords")
+        layout.prop(operator, "translate_coords")
         layout.prop(operator, "rescale_to_max")
+        layout.prop(operator, "recenter_to_origin")
 
 
 # export options panel for textures
@@ -213,6 +239,29 @@ class JSON_PT_export_minify(bpy.types.Panel):
         layout.prop(operator, "minify")
         layout.prop(operator, "decimal_precision")
 
+# export options panel for animation
+class JSON_PT_export_animation(bpy.types.Panel):
+    bl_space_type = "FILE_BROWSER"
+    bl_region_type = "TOOL_PROPS"
+    bl_label = "Animation"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+        return operator.bl_idname == "MINECRAFT_OT_export_json"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, "export_bones")
+        layout.prop(operator, "export_animation")
 
 # add io to menu
 def menu_func_import(self, context):
@@ -228,6 +277,7 @@ classes = [
     JSON_PT_export_geometry,
     JSON_PT_export_textures,
     JSON_PT_export_minify,
+    JSON_PT_export_animation,
 ]
 
 def register():
