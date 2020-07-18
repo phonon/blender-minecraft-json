@@ -1,12 +1,14 @@
 """
 Export model in object "clusters" associated with bones (experimental).
 - For each bone with associated objects, export separate
-.json model file with associated objects.
+  .json model file with associated objects.
 - Export .json bone hierarchy and data file (with bone matrices)
 
-Note:
+Notes:
 - Blender quaternion format is (w,x,y,z) -> converted to (x,y,z,w) on export
 - Blender bones use local y-up coordinate system (so do not need to change bone coords on export)
+- Blender calls the bone world-space transform "matrix_local".
+  This is instead exported as "matrix_world".
 """
 import bpy
 from bpy import context
@@ -85,7 +87,7 @@ class BoneNode(dict):
 
         self["name"] = name
         self["matrix"] = matrix_transformed.flatten(order="C").tolist()
-        self["matrix_local"] = matrix_local_transformed.flatten(order="C").tolist()
+        self["matrix_world"] = matrix_local_transformed.flatten(order="C").tolist()
         self["parent"] = parent
         self["children"] = []
     
