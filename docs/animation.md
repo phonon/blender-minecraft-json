@@ -57,7 +57,7 @@ the tree is a .json object in format:
             -1.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 1.0
         ],
-        "matrix_local": [
+        "matrix_world": [
             0.0, 0.0, 1.0, 0.0,
             0.0, 1.0, 0.0, 1.57,
             -1.0, 0.0, 0.0, 0.0,
@@ -86,7 +86,7 @@ Example of a portion of the bone tree block:
             0.0, 0.0, 1.0, 0.0,
             -1.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 1.0],
-        "matrix_local": [
+        "matrix_world": [
             0.0, -1.0, 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
             -1.0, 0.0, 0.0, 0.0,
@@ -100,7 +100,7 @@ Example of a portion of the bone tree block:
                     0.0, 0.0, 1.0, 0.0,
                     -1.0, 0.0, 0.0, 0.0,
                     0.0, 0.0, 0.0, 1.0],
-                "matrix_local": [
+                "matrix_world": [
                     0.0, 0.0, 1.0, 0.0,
                     0.0, 1.0, 0.0, 0.88,
                     -1.0, 0.0, 0.0, 0.0,
@@ -114,7 +114,7 @@ Example of a portion of the bone tree block:
                             0.0, 0.0, 1.0, 0.0,
                             -1.0, 0.0, 0.0, 0.0,
                             0.0, 0.0, 0.0, 1.0],
-                        "matrix_local": [
+                        "matrix_world": [
                             0.0, 0.0, 1.0, 0.0,
                             0.0, 1.0, 0.0, 1.58,
                             -1.0, 0.0, 0.0, 0.0,
