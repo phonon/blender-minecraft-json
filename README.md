@@ -44,7 +44,8 @@ Export Options
 | Texture Subfolder | "item" | Subfolder for model texture path: `assets/minecraft/textures/[subfolder]` |
 | Texture Name | | Name of texture generated `[name].png` (blank defaults to `.json` filename) |
 | Export UVs | True | Exports face UVs |
-| Generate Color Texture| True | Auto-textures solid material colors and generates a `.png` image texture exported alongside model (overwrites UVs) |
+| Generate Color Texture| False | Auto-textures solid material colors and generates a `.png` image texture exported alongside model (overwrites UVs). By default will get colors from all materials in the Blender file. |
+| Only Use Exported Object Colors | False | When exporting auto-generated color texture, only use materials colors on exported objects (instead of all materials in file). |
 | Minify .json | False | Enable options to reduce .json file size |
 | Decimal Precision | 8 | Number of digits after decimal point in output .json (-1 to disable) |
 | Export Bones | False | Export model in chunks by associated bones (experimental) |

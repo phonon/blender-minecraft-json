@@ -114,7 +114,13 @@ class ExportMinecraftJSON(Operator, ExportHelper):
     
     generate_texture: BoolProperty(
         name="Generate Color Texture",
-        description="Generate texture image from material colors",
+        description="Generate texture image from all material colors",
+        default=False,
+    )
+    
+    use_only_exported_object_colors: BoolProperty(
+        name="Only Use Exported Object Colors",
+        description="Generate texture from material colors only on exported objects",
         default=False,
     )
 
@@ -213,6 +219,7 @@ class JSON_PT_export_textures(bpy.types.Panel):
         layout.prop(operator, "texture_filename")
         layout.prop(operator, "export_uvs")
         layout.prop(operator, "generate_texture")
+        layout.prop(operator, "use_only_exported_object_colors")
 
 
 # export options panel for minifying .json output

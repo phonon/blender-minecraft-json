@@ -411,7 +411,7 @@ def save(context,
             
             print("chunk " + filepath_name + "." + bone_name + ": " + chunk_filepath)
 
-            export_minecraft_json.write_file(
+            export_minecraft_json.save_objects(
                 chunk_filepath,
                 group.objects,
                 rescale_to_max=False,
