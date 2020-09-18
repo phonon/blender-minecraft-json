@@ -169,27 +169,41 @@ def add_to_group(groups, name, id):
         groups[name] = [id]
 
 
-def get_material_color(obj, material_index, default_color = (0.0, 0.0, 0.0, 1.0)):
+def get_material_color(mat):
+    """Get material color as tuple (r, g, b, a). Return None if no
+    material node has color property.
+    Inputs:
+    - mat: Material
+    Returns:
+    - color tuple (r, g, b,a ) or None
+    """
+    # get first node with valid color
+    if mat.node_tree is not None:
+        for n in mat.node_tree.nodes:
+            # principled BSDF
+            if "Base Color" in n.inputs:
+                color = n.inputs["Base Color"].default_value
+                color = (color[0], color[1], color[2], color[3])
+                return color
+            # most other materials with color
+            elif "Color" in n.inputs:
+                color = n.inputs["Color"].default_value
+                color = (color[0], color[1], color[2], color[3])
+                return color
+    
+    return None
+
+
+def get_object_color(obj, material_index, default_color = (0.0, 0.0, 0.0, 1.0)):
     """Get obj material color in index as tuple (r, g, b, a).
     """
     if material_index < len(obj.material_slots):
         slot = obj.material_slots[material_index]
         material = slot.material
         if material is not None:
-            nodes = material.node_tree.nodes
-
-            # get first node with valid color
-            for n in nodes:
-                # principled BSDF
-                if "Base Color" in n.inputs:
-                    color = n.inputs["Base Color"].default_value
-                    color = (color[0], color[1], color[2], color[3])
-                    return color
-                # most other materials with color
-                elif "Color" in n.inputs:
-                    color = n.inputs["Color"].default_value
-                    color = (color[0], color[1], color[2], color[3])
-                    return color
+            color = get_material_color(material)
+            if color is not None:
+                return color
     
     return default_color
 
@@ -215,7 +229,83 @@ def loop_is_clockwise(coords):
     return area > 0
 
 
-def write_file(
+def create_color_texture(
+    colors,
+    min_size = 16,
+):
+    """Create a packed square texture from list of input colors. Each color
+    is a distinct RGB tuple given a 3x3 pixel square in the texture. These
+    must be 3x3 pixels so that there is no uv bleeding near the face edges.
+    Also includes a tile for a default color for faces with no material.
+    This is the next unfilled 3x3 tile.
+
+    Inputs:
+    - colors: Iterable of colors. Each color should be indexable like an rgb
+              tuple c = (r, g, b), just so that r = c[0], b = c[1], g = c[2].
+    - min_size: Minimum size of texture (must be power 2^n). By default
+                16 because Minecraft needs min sized 16 textures for 4 mipmap levels.'
+    
+    Returns:
+    - tex_pixels: Flattened array of texture pixels.
+    - tex_size: Size of image texture.
+    - color_tex_uv_map: Dict map from rgb tuple color to minecraft format uv coords
+                        (r, g, b) -> (xmin, ymin, xmax, ymax)
+    - default_color_uv: Default uv coords for unmapped materials (xmin, ymin, xmax, ymax).
+    """
+    # blender interprets (r,g,b,a) in sRGB space
+    def linear_to_sRGB(v):
+        if v < 0.0031308:
+            return v * 12.92
+        else:
+            return 1.055 * (v ** (1/2.4)) - 0.055
+    
+    # fit textures into closest (2^n,2^n) sized texture
+    # each color takes a (3,3) pixel chunk to avoid color
+    # bleeding at UV edges seams
+    # -> get smallest n to fit all colors, add +1 for a default color tile
+    color_grid_size = math.ceil(math.sqrt(len(colors) + 1)) # colors on each axis
+    tex_size = max(min_size, 2 ** math.ceil(math.log2(3 * color_grid_size))) # fit to (2^n, 2^n) image
+    
+    # composite colors into white RGBA grid
+    tex_colors = np.ones((color_grid_size, color_grid_size, 4))
+    color_tex_uv_map = {}
+    for i, c in enumerate(colors):
+        # convert color to sRGB
+        c_srgb = (linear_to_sRGB(c[0]), linear_to_sRGB(c[1]), linear_to_sRGB(c[2]), c[3])
+
+        tex_colors[i // color_grid_size, i % color_grid_size, :] = c_srgb
+        
+        # uvs: [x1, y1, x2, y2], each value from [0, 16] as proportion of image
+        # map each color to a uv
+        x1 = ( 3*(i % color_grid_size) + 1 ) / tex_size * 16
+        x2 = ( 3*(i % color_grid_size) + 2 ) / tex_size * 16
+        y1 = ( 3*(i // color_grid_size) + 1 ) / tex_size * 16
+        y2 = ( 3*(i // color_grid_size) + 2 ) / tex_size * 16
+        color_tex_uv_map[c] = [x1, y1, x2, y2]
+    
+    # default color uv coord (last coord + 1)
+    idx = len(colors)
+    default_color_uv = [
+        ( 3*(idx % color_grid_size) + 1 ) / tex_size * 16,
+        ( 3*(idx // color_grid_size) + 1 ) / tex_size * 16,
+        ( 3*(idx % color_grid_size) + 2 ) / tex_size * 16,
+        ( 3*(idx // color_grid_size) + 2 ) / tex_size * 16
+    ]
+
+    # triple colors into 3x3 pixel chunks
+    tex_colors = np.repeat(tex_colors, 3, axis=0)
+    tex_colors = np.repeat(tex_colors, 3, axis=1)
+    tex_colors = np.flip(tex_colors, axis=0)
+
+    # pixels as flattened array (for blender Image api)
+    tex_pixels = np.ones((tex_size, tex_size, 4))
+    tex_pixels[-tex_colors.shape[0]:, 0:tex_colors.shape[1], :] = tex_colors
+    tex_pixels = tex_pixels.flatten("C")
+
+    return tex_pixels, tex_size, color_tex_uv_map, default_color_uv
+
+
+def save_objects(
     filepath,
     objects,
     rescale_to_max = False,
@@ -224,6 +314,7 @@ def write_file(
     recenter_to_origin = False,
     blender_origin = [0., 0., 0.],
     generate_texture=True,
+    use_only_exported_object_colors=False,
     texture_folder="",
     texture_filename="",
     export_uvs=True,
@@ -238,22 +329,28 @@ def write_file(
     - filepath: Output file path name.
     - object: Iterable collection of Blender objects
     - rescale_to_max: Scale exported model to max volume allowed.
-    - use_head_upscaling_compensation: Clamp over-sized models to max,
-        but add upscaling in minecraft head slot (experimental,
-        used with animation export, can allow up to 4x max size).
-        Overridden by rescale_to_max (these are incompatible).
+    - use_head_upscaling_compensation:
+            Clamp over-sized models to max,
+            but add upscaling in minecraft head slot (experimental,
+            used with animation export, can allow up to 4x max size).
+            Overridden by rescale_to_max (these are incompatible).
     - translate_coords: Translate into Minecraft [-16, 32] space so origin = (8,8,8)
     - recenter_to_origin: Recenter model so that its center is at Minecraft origin (8,8,8)
     - blender_origin: Origin in Blender coordinates (in Blender XYZ space).
-        Use this to translate exported model.
-    - generate_texture: Generate texture from solid material colors on objects.
+            Use this to translate exported model.
+    - generate_texture: Generate texture from solid material colors. By default, creates
+            a color texture from all materials in file (so all groups of
+            objects can share the same texture file).
+    - use_only_exported_object_colors:
+            Generate texture colors from only exported objects instead of default using
+            all file materials.
     - texture_folder: Output texture subpath, for typical "item/texture_name" the
-        texture folder would be "item".
+            texture folder would be "item".
     - texture_file_name: Name of texture file. TODO: auto-parse textures from materials.
     - export_uvs: Export object uvs.
     - minify: Minimize output file size (write into single line, remove spaces, ...)
     - decimal_precision: Number of digits after decimal to keep in numbers.
-        Requires `minify = True`. Set to -1 to disable.
+            Requires `minify = True`. Set to -1 to disable.
     """
 
     # output json model
@@ -286,8 +383,11 @@ def write_file(
         model_v_max = np.array([0., 0., 0.,])
     
     # all material colors from all object faces
-    model_colors = set()
-
+    if use_only_exported_object_colors:
+        model_colors = set()
+    else:
+        model_colors = None
+    
     for obj in objects:
         mesh = obj.data
         if not isinstance(mesh, bpy.types.Mesh):
@@ -434,7 +534,7 @@ def write_file(
             face_normal = face.normal
 
             face_normals[0:3,i] = face.normal
-            face_colors[i] = get_material_color(obj, face.material_index)
+            face_colors[i] = get_object_color(obj, face.material_index)
 
             if export_uvs and not generate_texture:
                 # uv loop
@@ -548,7 +648,8 @@ def write_file(
                     face_uv_rotations[i] = COUNTERCLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
 
         # add face colors to overall model set
-        model_colors.update(face_colors)
+        if model_colors is not None:
+            model_colors.update(face_colors)
 
         # apply all 90 deg rots to face normals
         face_normals_transformed = mat_rot_reducer @ face_normals
@@ -673,46 +774,15 @@ def write_file(
     # generate texture images
     # ===========================
     if generate_texture:
-        # fit textures into closest (2^n,2^n) sized texture
-        # each color takes a (3,3) pixel chunk to avoid color
-        # bleeding at UV edges seams
-        # -> get smallest n to fit all colors
-        color_grid_size = math.ceil(math.sqrt(len(model_colors))) # colors on each axis
-        tex_size = 2 ** math.ceil(math.log2(3 * color_grid_size)) # fit to (2^n, 2^n) image
-
-        # blender interprets (r,g,b,a) in sRGB space
-        def linear_to_sRGB(v):
-            if v < 0.0031308:
-                return v * 12.92
-            else:
-                return 1.055 * (v ** (1/2.4)) - 0.055
-
-        # composite colors into white RGBA grid
-        tex_colors = np.ones((color_grid_size, color_grid_size, 4))
-        color_tex_uv_map = {}
-        for i, c in enumerate(model_colors):
-            # convert color to sRGB
-            c_srgb = (linear_to_sRGB(c[0]), linear_to_sRGB(c[1]), linear_to_sRGB(c[2]), c[3])
-
-            tex_colors[i // color_grid_size, i % color_grid_size, :] = c_srgb
-            
-            # uvs: [x1, y1, x2, y2], each value from [0, 16] as proportion of image
-            # map each color to a uv
-            x1 = ( 3*(i % color_grid_size) + 1 ) / tex_size * 16
-            x2 = ( 3*(i % color_grid_size) + 2 ) / tex_size * 16
-            y1 = ( 3*(i // color_grid_size) + 1 ) / tex_size * 16
-            y2 = ( 3*(i // color_grid_size) + 2 ) / tex_size * 16
-            color_tex_uv_map[c] = [x1, y1, x2, y2]
+        # default, get colors from all materials in file
+        if model_colors is None:
+            model_colors = set()
+            for mat in bpy.data.materials:
+                color = get_material_color(mat)
+                if color is not None:
+                    model_colors.add(color)
         
-        # triple colors into 3x3 pixel chunks
-        tex_colors = np.repeat(tex_colors, 3, axis=0)
-        tex_colors = np.repeat(tex_colors, 3, axis=1)
-        tex_colors = np.flip(tex_colors, axis=0)
-
-        # pixels as flattened array (for blender Image api)
-        tex_pixels = np.ones((tex_size, tex_size, 4))
-        tex_pixels[-tex_colors.shape[0]:, 0:tex_colors.shape[1], :] = tex_colors
-        tex_pixels = tex_pixels.flatten("C")
+        tex_pixels, tex_size, color_tex_uv_map, default_color_uv = create_color_texture(model_colors)
 
         # texture output filepaths
         if texture_filename == "":
@@ -738,8 +808,9 @@ def write_file(
             for f in faces:
                 color = faces[f]
                 if isinstance(color, tuple):
+                    color_uv = color_tex_uv_map[color] if color in color_tex_uv_map else default_color_uv
                     faces[f] = {
-                        "uv": color_tex_uv_map[color],
+                        "uv": color_uv,
                         "texture": "#0",
                     }
 
@@ -793,7 +864,7 @@ def save(context,
          **kwargs):
     
     objects = bpy.context.selected_objects if selection_only else bpy.context.scene.objects 
-    write_file(filepath, objects, **kwargs)
+    save_objects(filepath, objects, **kwargs)
     
     print("SAVED", filepath)
 
