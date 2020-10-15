@@ -2,7 +2,7 @@ Blender Minecraft JSON Import/Export
 =======================================
 Import/export cuboid geometry between Blender and Minecraft .json model format. The Blender model must follow very specific restrictions for the exporter to work (read **Export Guide** below).
 
-Supports import/export uvs and can also auto-generate and export solid material colors packed into an image texture.
+Supports import/export uvs. This addon can export solid material colors packed into an auto-generated image texture (alongside normal textures), so you can mix textures and solid face colors on Blender meshes.
 
 Tested on Blender 2.83.
 
@@ -44,7 +44,7 @@ Export Options
 | Texture Subfolder | "item" | Subfolder for model texture path: `assets/minecraft/textures/[subfolder]` |
 | Texture Name | | Name of texture generated `[name].png` (blank defaults to `.json` filename) |
 | Export UVs | True | Exports face UVs |
-| Generate Color Texture| False | Auto-textures solid material colors and generates a `.png` image texture exported alongside model (overwrites UVs). By default will get colors from all materials in the Blender file. |
+| Generate Color Texture | True | Auto-textures solid material colors and generates a `.png` image texture exported alongside model (overwrites UVs). By default will get colors from all materials in the Blender file. |
 | Only Use Exported Object Colors | False | When exporting auto-generated color texture, only use materials colors on exported objects (instead of all materials in file). |
 | Minify .json | False | Enable options to reduce .json file size |
 | Decimal Precision | 8 | Number of digits after decimal point in output .json (-1 to disable) |
@@ -73,4 +73,3 @@ Detailed overview: https://minecraft.gamepedia.com/Model
 TODO
 ---------------------------------------
 - Collection hierarchy export (currently no nested collections, only immediate collection exported)
-- Exporting multiple textures on objects
