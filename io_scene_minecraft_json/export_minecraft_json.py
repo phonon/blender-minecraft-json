@@ -49,9 +49,8 @@ DIRECTIONS = np.array([
 
 # normals for minecraft directions in BLENDER world space
 # e.g. blender (-1, 0, 0) is minecraft north (0, 0, -1)
-# shape (f,n,v) = (6,6,3)
+# shape (f,n) = (6,3)
 #   f = 6: number of cuboid faces to test
-#   n = 6: number of normal directions
 #   v = 3: vertex coordinates (x,y,z)
 DIRECTION_NORMALS = np.array([
     [-1.,  0.,  0.],
@@ -61,7 +60,7 @@ DIRECTION_NORMALS = np.array([
     [ 0.,  0.,  1.],
     [ 0.,  0., -1.],
 ])
-DIRECTION_NORMALS = np.tile(DIRECTION_NORMALS[np.newaxis,...], (6,1,1))
+# DIRECTION_NORMALS = np.tile(DIRECTION_NORMALS[np.newaxis,...], (6,1,1))
 
 # blender counterclockwise uv -> minecraft uv rotation lookup table
 # (these values experimentally determined)
@@ -175,14 +174,24 @@ def get_material_color(mat):
     Inputs:
     - mat: Material
     Returns:
-    - color tuple (r, g, b,a ) or None
+    - color tuple (r, g, b,a ) if a basic color,
+      "texture_path" string if a texture,
+      or None if no color/path
     """
     # get first node with valid color
     if mat.node_tree is not None:
         for n in mat.node_tree.nodes:
             # principled BSDF
             if "Base Color" in n.inputs:
-                color = n.inputs["Base Color"].default_value
+                node_color = n.inputs["Base Color"]
+                # check if its a texture path
+                for link in node_color.links:
+                    from_node = link.from_node
+                    if isinstance(from_node, bpy.types.ShaderNodeTexImage):
+                        if from_node.image is not None and from_node.image.filepath != "":
+                            return from_node.image.filepath
+                # else, export color tuple
+                color = node_color.default_value
                 color = (color[0], color[1], color[2], color[3])
                 return color
             # most other materials with color
@@ -195,7 +204,9 @@ def get_material_color(mat):
 
 
 def get_object_color(obj, material_index, default_color = (0.0, 0.0, 0.0, 1.0)):
-    """Get obj material color in index as tuple (r, g, b, a).
+    """Get obj material color in index as either 
+    - tuple (r, g, b, a) if using a default color input
+    - texture file name string "path" if using a texture input
     """
     if material_index < len(obj.material_slots):
         slot = obj.material_slots[material_index]
@@ -356,9 +367,7 @@ def save_objects(
     # output json model
     model_json = {
         "texture_size": [16, 16], # default, will be overridden
-        "textures": {
-            "0": ""
-        },
+        "textures": {},
     }
 
     elements = []
@@ -368,7 +377,7 @@ def save_objects(
     v_world = np.zeros((3, 8))
     v_local = np.zeros((3, 8))
     face_normals = np.zeros((3,6))
-    face_uvs = np.zeros((6,4))
+    face_uvs = np.zeros((4,))
     face_colors = [None for _ in range(6)]
 
     # model bounding box vector
@@ -382,11 +391,14 @@ def save_objects(
         model_v_min = np.array([0., 0., 0.,])
         model_v_max = np.array([0., 0., 0.,])
     
-    # all material colors from all object faces
+    # all material colors tuples from all object faces
     if use_only_exported_object_colors:
         model_colors = set()
     else:
         model_colors = None
+    
+    # all material texture str paths
+    model_textures = set()
     
     for obj in objects:
         mesh = obj.data
@@ -522,9 +534,6 @@ def save_objects(
         }
         
         uv_layer = mesh.uv_layers.active.data
-        
-        # face uv rotations, depends on starting coordinate
-        face_uv_rotations = [0] * 6
 
         for i, face in enumerate(mesh.polygons):
             if i > 5: # should be 6 faces only
@@ -532,151 +541,147 @@ def save_objects(
                 break
             
             face_normal = face.normal
+            face_normal_world = mat_rot_reducer @ face_normal
 
-            face_normals[0:3,i] = face.normal
-            face_colors[i] = get_object_color(obj, face.material_index)
+            # stack + reshape to (6,3)
+            face_normal_stacked = np.transpose(face_normal_world[..., np.newaxis], (1,0))
+            face_normal_stacked = np.tile(face_normal_stacked, (6,1))
 
-            if export_uvs and not generate_texture:
-                # uv loop
-                loop_start = face.loop_start
-                face_uv_0 = uv_layer[loop_start].uv
-                face_uv_1 = uv_layer[loop_start+1].uv
-                face_uv_2 = uv_layer[loop_start+2].uv
-                face_uv_3 = uv_layer[loop_start+3].uv
+            # get face direction string
+            face_direction_index = np.argmax(np.sum(face_normal_stacked * DIRECTION_NORMALS, axis=1), axis=0)
+            d = DIRECTIONS[face_direction_index]
+            
+            face_color = get_object_color(obj, face.material_index)
+            
+            # solid color tuple
+            if isinstance(face_color, tuple) and generate_texture:
+                faces[d] = face_color # replace face with color
+                if model_colors is not None:
+                    model_colors.add(face_color)
+            # texture
+            elif isinstance(face_color, str):
+                faces[d]["texture"] = face_color
+                model_textures.add(face_color)
 
-                uv_min_x = min(face_uv_0[0], face_uv_2[0])
-                uv_max_x = max(face_uv_0[0], face_uv_2[0])
-                uv_min_y = min(face_uv_0[1], face_uv_2[1])
-                uv_max_y = max(face_uv_0[1], face_uv_2[1])
+                if export_uvs:
+                    # uv loop
+                    loop_start = face.loop_start
+                    face_uv_0 = uv_layer[loop_start].uv
+                    face_uv_1 = uv_layer[loop_start+1].uv
+                    face_uv_2 = uv_layer[loop_start+2].uv
+                    face_uv_3 = uv_layer[loop_start+3].uv
 
-                uv_clockwise = loop_is_clockwise([face_uv_0, face_uv_1, face_uv_2, face_uv_3])
+                    uv_min_x = min(face_uv_0[0], face_uv_2[0])
+                    uv_max_x = max(face_uv_0[0], face_uv_2[0])
+                    uv_min_y = min(face_uv_0[1], face_uv_2[1])
+                    uv_max_y = max(face_uv_0[1], face_uv_2[1])
 
-                # vertices loop (using vertices transformed by all 90 deg angles)
-                # project 3d vertex loop onto 2d loop based on face normal,
-                # minecraft uv mapping starting corner experimentally determined
-                verts = [ v_local_transformed[:,v] for v in face.vertices ]
-                face_normal_world = mat_rot_reducer @ face_normal
-                
-                if face_normal_world[0] > 0.5: # normal = (1, 0, 0)
-                    verts = [ (v[1], v[2]) for v in verts ]
-                elif face_normal_world[0] < -0.5: # normal = (-1, 0, 0)
-                    verts = [ (-v[1], v[2]) for v in verts ]
-                elif face_normal_world[1] > 0.5: # normal = (0, 1, 0)
-                    verts = [ (-v[0], v[2]) for v in verts ]
-                elif face_normal_world[1] < -0.5: # normal = (0, -1, 0)
-                    verts = [ (v[0], v[2]) for v in verts ]
-                elif face_normal_world[2] > 0.5: # normal = (0, 0, 1)
-                    verts = [ (v[1], -v [0]) for v in verts ]
-                elif face_normal_world[2] < -0.5: # normal = (0, 0, -1)
-                    verts = [ (v[1], v[0]) for v in verts ]
-                
-                vert_min_x = min(verts[0][0], verts[2][0])
-                vert_max_x = max(verts[0][0], verts[2][0])
-                vert_min_y = min(verts[0][1], verts[2][1])
-                vert_max_y = max(verts[0][1], verts[2][1])
+                    uv_clockwise = loop_is_clockwise([face_uv_0, face_uv_1, face_uv_2, face_uv_3])
 
-                vert_clockwise = loop_is_clockwise(verts)
-                
-                # get uv, vert loop starting corner index 0..3 in face loop
+                    # vertices loop (using vertices transformed by all 90 deg angles)
+                    # project 3d vertex loop onto 2d loop based on face normal,
+                    # minecraft uv mapping starting corner experimentally determined
+                    verts = [ v_local_transformed[:,v] for v in face.vertices ]
+                    #face_normal_world = mat_rot_reducer @ face_normal
+                    
+                    if face_normal_world[0] > 0.5: # normal = (1, 0, 0)
+                        verts = [ (v[1], v[2]) for v in verts ]
+                    elif face_normal_world[0] < -0.5: # normal = (-1, 0, 0)
+                        verts = [ (-v[1], v[2]) for v in verts ]
+                    elif face_normal_world[1] > 0.5: # normal = (0, 1, 0)
+                        verts = [ (-v[0], v[2]) for v in verts ]
+                    elif face_normal_world[1] < -0.5: # normal = (0, -1, 0)
+                        verts = [ (v[0], v[2]) for v in verts ]
+                    elif face_normal_world[2] > 0.5: # normal = (0, 0, 1)
+                        verts = [ (v[1], -v [0]) for v in verts ]
+                    elif face_normal_world[2] < -0.5: # normal = (0, 0, -1)
+                        verts = [ (v[1], v[0]) for v in verts ]
+                    
+                    vert_min_x = min(verts[0][0], verts[2][0])
+                    vert_max_x = max(verts[0][0], verts[2][0])
+                    vert_min_y = min(verts[0][1], verts[2][1])
+                    vert_max_y = max(verts[0][1], verts[2][1])
 
-                # uv start corner index
-                uv_start_x = face_uv_0[0]
-                uv_start_y = face_uv_0[1]
-                if uv_start_y < uv_max_y:
-                    # start coord 0
-                    if uv_start_x < uv_max_x:
-                        uv_loop_start_index = 0
-                    # start coord 1
+                    vert_clockwise = loop_is_clockwise(verts)
+                    
+                    # get uv, vert loop starting corner index 0..3 in face loop
+
+                    # uv start corner index
+                    uv_start_x = face_uv_0[0]
+                    uv_start_y = face_uv_0[1]
+                    if uv_start_y < uv_max_y:
+                        # start coord 0
+                        if uv_start_x < uv_max_x:
+                            uv_loop_start_index = 0
+                        # start coord 1
+                        else:
+                            uv_loop_start_index = 1
                     else:
-                        uv_loop_start_index = 1
-                else:
-                    # start coord 2
-                    if uv_start_x > uv_min_x:
-                        uv_loop_start_index = 2
-                    # start coord 3
+                        # start coord 2
+                        if uv_start_x > uv_min_x:
+                            uv_loop_start_index = 2
+                        # start coord 3
+                        else:
+                            uv_loop_start_index = 3
+                    
+                    # vert start corner index
+                    vert_start_x = verts[0][0]
+                    vert_start_y = verts[0][1]
+                    if vert_start_y < vert_max_y:
+                        # start coord 0
+                        if vert_start_x < vert_max_x:
+                            vert_loop_start_index = 0
+                        # start coord 1
+                        else:
+                            vert_loop_start_index = 1
                     else:
-                        uv_loop_start_index = 3
-                
-                # vert start corner index
-                vert_start_x = verts[0][0]
-                vert_start_y = verts[0][1]
-                if vert_start_y < vert_max_y:
-                    # start coord 0
-                    if vert_start_x < vert_max_x:
-                        vert_loop_start_index = 0
-                    # start coord 1
-                    else:
-                        vert_loop_start_index = 1
-                else:
-                    # start coord 2
-                    if vert_start_x > vert_min_x:
-                        vert_loop_start_index = 2
-                    # start coord 3
-                    else:
-                        vert_loop_start_index = 3
+                        # start coord 2
+                        if vert_start_x > vert_min_x:
+                            vert_loop_start_index = 2
+                        # start coord 3
+                        else:
+                            vert_loop_start_index = 3
 
-                # set uv flip and rotation based on
-                # 1. clockwise vs counterclockwise loop
-                # 2. relative starting corner difference between vertex loop and uv loop
-                # NOTE: if face normals correct, vertices should always be counterclockwise...
-                if uv_clockwise == False and vert_clockwise == False:
-                    face_uvs[i][0] = uv_min_x
-                    face_uvs[i][1] = uv_max_y
-                    face_uvs[i][2] = uv_max_x
-                    face_uvs[i][3] = uv_min_y
-                    face_uv_rotations[i] = COUNTERCLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
-                elif uv_clockwise == True and vert_clockwise == False:
-                    # invert x face uvs
-                    face_uvs[i][0] = uv_max_x
-                    face_uvs[i][1] = uv_max_y
-                    face_uvs[i][2] = uv_min_x
-                    face_uvs[i][3] = uv_min_y
-                    face_uv_rotations[i] = CLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
-                elif uv_clockwise == False and vert_clockwise == True:
-                    # invert y face uvs, case should not happen
-                    face_uvs[i][0] = uv_max_x
-                    face_uvs[i][1] = uv_max_y
-                    face_uvs[i][2] = uv_min_x
-                    face_uvs[i][3] = uv_min_y
-                    face_uv_rotations[i] = CLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
-                else: # uv_clockwise == True and vert_clockwise == True:
-                    # case should not happen
-                    face_uvs[i][0] = uv_min_x
-                    face_uvs[i][1] = uv_max_y
-                    face_uvs[i][2] = uv_max_x
-                    face_uvs[i][3] = uv_min_y
-                    face_uv_rotations[i] = COUNTERCLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
-
-        # add face colors to overall model set
-        if model_colors is not None:
-            model_colors.update(face_colors)
-
-        # apply all 90 deg rots to face normals
-        face_normals_transformed = mat_rot_reducer @ face_normals
-
-        # reshape to (6,1,3)
-        face_normals_transformed = np.transpose(face_normals_transformed, (1,0))
-        face_normals_transformed = np.reshape(face_normals_transformed[...,np.newaxis], (6,1,3))
-
-        # get face direction strings, set face colors
-        face_directions = np.argmax(np.sum(face_normals_transformed * DIRECTION_NORMALS, axis=2), axis=1)
-        face_directions = DIRECTIONS[face_directions]
-
-        # replace faces with material colors
-        if generate_texture:
-            for i, d in enumerate(face_directions):
-                faces[d] = face_colors[i]
-        # set uvs
-        elif export_uvs:
-            for i, d in enumerate(face_directions):
-                xmin = face_uvs[i][0] * 16
-                ymin = (1.0 - face_uvs[i][1]) * 16
-                xmax = face_uvs[i][2] * 16
-                ymax = (1.0 - face_uvs[i][3]) * 16
-                faces[d]["uv"] = [ xmin, ymin, xmax, ymax ]
-                
-                if face_uv_rotations[i] != 0 and face_uv_rotations != 360:
-                    faces[d]["rotation"] = face_uv_rotations[i] if face_uv_rotations[i] >= 0 else 360 + face_uv_rotations[i]
+                    # set uv flip and rotation based on
+                    # 1. clockwise vs counterclockwise loop
+                    # 2. relative starting corner difference between vertex loop and uv loop
+                    # NOTE: if face normals correct, vertices should always be counterclockwise...
+                    if uv_clockwise == False and vert_clockwise == False:
+                        face_uvs[0] = uv_min_x
+                        face_uvs[1] = uv_max_y
+                        face_uvs[2] = uv_max_x
+                        face_uvs[3] = uv_min_y
+                        face_uv_rotation = COUNTERCLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
+                    elif uv_clockwise == True and vert_clockwise == False:
+                        # invert x face uvs
+                        face_uvs[0] = uv_max_x
+                        face_uvs[1] = uv_max_y
+                        face_uvs[2] = uv_min_x
+                        face_uvs[3] = uv_min_y
+                        face_uv_rotation = CLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
+                    elif uv_clockwise == False and vert_clockwise == True:
+                        # invert y face uvs, case should not happen
+                        face_uvs[0] = uv_max_x
+                        face_uvs[1] = uv_max_y
+                        face_uvs[2] = uv_min_x
+                        face_uvs[3] = uv_min_y
+                        face_uv_rotation = CLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
+                    else: # uv_clockwise == True and vert_clockwise == True:
+                        # case should not happen
+                        face_uvs[0] = uv_min_x
+                        face_uvs[1] = uv_max_y
+                        face_uvs[2] = uv_max_x
+                        face_uvs[3] = uv_min_y
+                        face_uv_rotation = COUNTERCLOCKWISE_UV_ROTATION_LOOKUP[uv_loop_start_index][vert_loop_start_index]
+                    
+                    xmin = face_uvs[0] * 16
+                    ymin = (1.0 - face_uvs[1]) * 16
+                    xmax = face_uvs[2] * 16
+                    ymax = (1.0 - face_uvs[3]) * 16
+                    faces[d]["uv"] = [ xmin, ymin, xmax, ymax ]
+                    
+                    if face_uv_rotation != 0 and face_uv_rotation != 360:
+                        faces[d]["rotation"] = face_uv_rotation if face_uv_rotation >= 0 else 360 + face_uv_rotation
         
         # ================================
         # get collection
@@ -748,28 +753,6 @@ def save_objects(
     else:
         model_origin_shift = -to_y_up(blender_origin)
     
-    for obj in elements:
-        # re-center model
-        obj["to"] = model_origin_shift + obj["to"]
-        obj["from"] = model_origin_shift + obj["from"]
-        obj["rotation"]["origin"] = model_origin_shift + obj["rotation"]["origin"]
-        
-        # re-scale objects
-        obj["to"] = rescale_factor * obj["to"]
-        obj["from"] = rescale_factor * obj["from"]
-        obj["rotation"]["origin"] = rescale_factor * obj["rotation"]["origin"]
-
-        # re-center coordinates to minecraft origin
-        if translate_coords:
-            obj["to"] = minecraft_origin + obj["to"]
-            obj["from"] = minecraft_origin + obj["from"]
-            obj["rotation"]["origin"] = minecraft_origin + obj["rotation"]["origin"]     
-
-        # convert numpy to python list
-        obj["to"] = obj["to"].tolist()
-        obj["from"] = obj["from"].tolist()
-        obj["rotation"]["origin"] = obj["rotation"]["origin"].tolist()
-
     # ===========================
     # generate texture images
     # ===========================
@@ -779,7 +762,7 @@ def save_objects(
             model_colors = set()
             for mat in bpy.data.materials:
                 color = get_material_color(mat)
-                if color is not None:
+                if isinstance(color, tuple):
                     model_colors.add(color)
         
         tex_pixels, tex_size, color_tex_uv_map, default_color_uv = create_color_texture(model_colors)
@@ -802,18 +785,6 @@ def save_objects(
         tex.filepath_raw = texture_save_path
         tex.save()
 
-        # re-write UVs on all elements
-        for obj in elements:
-            faces = obj["faces"]
-            for f in faces:
-                color = faces[f]
-                if isinstance(color, tuple):
-                    color_uv = color_tex_uv_map[color] if color in color_tex_uv_map else default_color_uv
-                    faces[f] = {
-                        "uv": color_uv,
-                        "texture": "#0",
-                    }
-
         # write texture info to output model
         model_json["texture_size"] = [tex_size, tex_size]
         model_json["textures"]["0"] = texture_model_path
@@ -823,6 +794,68 @@ def save_objects(
     elif texture_filename != "":
         model_json["texture_size"] = [16, 16]
         model_json["textures"]["0"] = posixpath.join(texture_folder, texture_filename)
+    
+    # ===========================
+    # process face texture paths
+    # convert blender path names "//folder\tex.png" -> "item/tex"
+    # add textures indices for textures, and create face mappings like "#1"
+    # note: #0 id reserved for generated color texture
+    # ===========================
+    texture_refs = {} # maps blender path name -> #n identifiers
+    texture_id = 1    # texture id in "#1" identifier
+    for texture_path in model_textures:
+        texture_out_path = texture_path
+        if texture_out_path[0:2] == "//":
+            texture_out_path = texture_out_path[2:]
+        texture_out_path = texture_out_path.replace("\\", "/")
+        texture_out_path = os.path.splitext(texture_out_path)[0]
+        
+        texture_refs[texture_path] = "#" + str(texture_id)
+        model_json["textures"][str(texture_id)] = posixpath.join(texture_folder, texture_out_path)
+        texture_id += 1
+
+    # ===========================
+    # final object + face processing
+    # 1. recenter/rescale object
+    # 2. map solid color face uv -> location in generated texture
+    # 3. rewrite path textures -> texture name reference
+    # ===========================
+    for obj in elements:
+        # re-center model
+        obj["to"] = model_origin_shift + obj["to"]
+        obj["from"] = model_origin_shift + obj["from"]
+        obj["rotation"]["origin"] = model_origin_shift + obj["rotation"]["origin"]
+        
+        # re-scale objects
+        obj["to"] = rescale_factor * obj["to"]
+        obj["from"] = rescale_factor * obj["from"]
+        obj["rotation"]["origin"] = rescale_factor * obj["rotation"]["origin"]
+
+        # re-center coordinates to minecraft origin
+        if translate_coords:
+            obj["to"] = minecraft_origin + obj["to"]
+            obj["from"] = minecraft_origin + obj["from"]
+            obj["rotation"]["origin"] = minecraft_origin + obj["rotation"]["origin"]     
+
+        # convert numpy to python list
+        obj["to"] = obj["to"].tolist()
+        obj["from"] = obj["from"].tolist()
+        obj["rotation"]["origin"] = obj["rotation"]["origin"].tolist()
+
+        faces = obj["faces"]
+        for d, f in faces.items():
+            if isinstance(f, tuple):
+                color_uv = color_tex_uv_map[f] if f in color_tex_uv_map else default_color_uv
+                faces[d] = {
+                    "uv": color_uv,
+                    "texture": "#0",
+                }
+            elif isinstance(f, dict):
+                face_texture = f["texture"]
+                if face_texture in texture_refs:
+                    f["texture"] = texture_refs[face_texture]
+                else:
+                    face_texture = "#0"
     
     # ===========================
     # convert groups
