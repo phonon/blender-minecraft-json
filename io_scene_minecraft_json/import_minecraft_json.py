@@ -146,6 +146,18 @@ def load(context,
                         xmax = face_uv_coords[2] / 16.0
                         ymax = 1.0 - face_uv_coords[1] / 16.0
 
+                        # swap axes according to the rotation, if specified
+                        if "rotation" in face_uv:
+                            if face_uv["rotation"] == 90:
+                                xmax,ymax = ymax,xmax
+                                xmin,ymin = ymin,xmin
+                            if face_uv["rotation"] == 180:
+                                xmin,xmax = xmax,xmin
+                                ymin,ymax = ymax,ymin
+                            if face_uv["rotation"] == 270:
+                                xmax,ymin = ymin,xmax
+                                xmin,ymax = ymax,xmin
+                                
                         # write 4 uv face loop coords
                         k = face.loop_start
                         uv_layer[k].uv[0:2] = xmax, ymin
@@ -153,8 +165,8 @@ def load(context,
                         uv_layer[k+2].uv[0:2] = xmin, ymax
                         uv_layer[k+3].uv[0:2] = xmin, ymin
         
-        # set name
-        obj.name = e["name"]
+        # set name (choose whatever is available or "cube" if no name or comment is given)
+        obj.name = e.get("name") or e.get("__comment") or "cube"
 
         # save created object
         objects.append(obj)
