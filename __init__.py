@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Minecraft JSON Import/Export",
     "author": "phonon",
-    "version": (0, 3, 0),
+    "version": (0, 4, 0),
     "blender": (2, 83, 0),
     "location": "View3D",
     "description": "Minecraft JSON import/export",

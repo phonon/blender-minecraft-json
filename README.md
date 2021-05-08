@@ -4,7 +4,7 @@ Import/export cuboid geometry between Blender and Minecraft .json model format. 
 
 Supports import/export uvs. This addon can export solid material colors packed into an auto-generated image texture (alongside normal textures), so you can mix textures and solid face colors on Blender meshes.
 
-Tested on Blender 2.83.
+Tested on Blender 2.83, 2.92.
 
 
 Installation

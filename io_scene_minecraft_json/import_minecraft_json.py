@@ -84,7 +84,6 @@ def get_full_file_path(filepath_parts, path, merge_point=None):
         return path # failed
 
 
-
 def create_textured_principled_bsdf(mat_name, tex_path):
     """Create new material with `mat_name` and texture path `tex_path`
     """
@@ -156,17 +155,18 @@ def load(context,
         while True:
             # parent path without namespacing, e.g. "minecraft:block/cobblestone" -> "block/cobblestone"
             parent_path = curr_data["parent"].split(":")[-1]
-            # parent_path_chunks = os.path.split(parent_path)
             
-            # # match base path
-            # idx_base_path = index_of(parent_path_chunks[0], filepath_parts)            
-            # filepath_parent = os.path.join(*filepath_parts[0:idx_base_path], parent_path + ".json")
+            # get parent path
             filepath_parent = get_full_file_path(filepath_parts, parent_path, merge_point=path_models_merge_point) + ".json"
 
-            with open(filepath_parent, "r") as f:
-                data_parent = json.load(f)
-                data_hierarchy.append(data_parent)
-                curr_data = data_parent
+            if os.path.exists(filepath_parent):
+                with open(filepath_parent, "r") as f:
+                    data_parent = json.load(f)
+                    data_hierarchy.append(data_parent)
+                    curr_data = data_parent
+            else:
+                print("FAILED TO FIND PARENT:", filepath_parent)
+                break
 
             curr_level += 1
 
@@ -314,17 +314,13 @@ def load(context,
                 face_directions = np.argmax(np.sum(face_normals * DIRECTION_NORMALS, axis=2), axis=1)
                 face_directions = DIRECTIONS[face_directions]
 
-                # set uvs face order in blender loop:
-                #   2___1    Minecraft space:
-                #   |   |      uv_min = 2
-                #   |___|      uv_max = 0
-                #   3   0
+                # set uvs face order in blender loop, determined experimentally
                 uv_layer = mesh.uv_layers.active.data
                 for uv_direction, face in zip(face_directions, mesh.polygons):
                     face_uv = uv.get(uv_direction)
                     if face_uv is not None:
                         if "uv" in face_uv:
-                            # unpack uv coords from minecraft [xmin, ymin, xmax, ymax]
+                            # unpack uv coords in minecraft coord space [xmin, ymin, xmax, ymax]
                             # transform from minecraft [0, 16] space +x,-y space to blender [0,1] +x,+y
                             face_uv_coords = face_uv["uv"]
                             xmin = face_uv_coords[0] / 16.0
@@ -333,28 +329,41 @@ def load(context,
                             ymax = 1.0 - face_uv_coords[1] / 16.0
                         else:
                             xmin = 0.0
-                            ymin = 0.0
+                            ymin = 1.0
                             xmax = 1.0
-                            ymax = 1.0
+                            ymax = 0.0
                         
-                        # swap axes according to the rotation, if specified
-                        if "rotation" in face_uv:
-                            if face_uv["rotation"] == 90:
-                                xmax,ymax = ymax,xmax
-                                xmin,ymin = ymin,xmin
-                            if face_uv["rotation"] == 180:
-                                xmin,xmax = xmax,xmin
-                                ymin,ymax = ymax,ymin
-                            if face_uv["rotation"] == 270:
-                                xmax,ymin = ymin,xmax
-                                xmin,ymax = ymax,xmin
-                        
-                        # write 4 uv face loop coords
+                        # write uv coords based on rotation
                         k = face.loop_start
-                        uv_layer[k].uv[0:2] = xmax, ymin
-                        uv_layer[k+1].uv[0:2] = xmax, ymax
-                        uv_layer[k+2].uv[0:2] = xmin, ymax
-                        uv_layer[k+3].uv[0:2] = xmin, ymin
+                        if "rotation" not in face_uv or face_uv["rotation"] == 0:
+                            uv_layer[k].uv[0:2] = xmax, ymin
+                            uv_layer[k+1].uv[0:2] = xmax, ymax
+                            uv_layer[k+2].uv[0:2] = xmin, ymax
+                            uv_layer[k+3].uv[0:2] = xmin, ymin
+
+                        elif face_uv["rotation"] == 90:
+                            uv_layer[k].uv[0:2] = xmax, ymax
+                            uv_layer[k+1].uv[0:2] = xmin, ymax
+                            uv_layer[k+2].uv[0:2] = xmin, ymin
+                            uv_layer[k+3].uv[0:2] = xmax, ymin
+
+                        elif face_uv["rotation"] == 180:
+                            uv_layer[k].uv[0:2] = xmin, ymax
+                            uv_layer[k+1].uv[0:2] = xmin, ymin
+                            uv_layer[k+2].uv[0:2] = xmax, ymin
+                            uv_layer[k+3].uv[0:2] = xmax, ymax
+
+                        elif face_uv["rotation"] == 270:
+                            uv_layer[k].uv[0:2] = xmin, ymin
+                            uv_layer[k+1].uv[0:2] = xmax, ymin
+                            uv_layer[k+2].uv[0:2] = xmax, ymax
+                            uv_layer[k+3].uv[0:2] = xmin, ymax
+
+                        else: # invalid rotation, should never occur... do default
+                            uv_layer[k].uv[0:2] = xmax, ymin
+                            uv_layer[k+1].uv[0:2] = xmax, ymax
+                            uv_layer[k+2].uv[0:2] = xmin, ymax
+                            uv_layer[k+3].uv[0:2] = xmin, ymin
 
                         # assign material
                         if "texture" in face_uv:
