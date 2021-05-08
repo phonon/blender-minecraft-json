@@ -1,3 +1,4 @@
+import os
 import json
 import numpy as np
 import math
@@ -31,16 +32,76 @@ DIRECTION_NORMALS = np.array([
 ])
 DIRECTION_NORMALS = np.tile(DIRECTION_NORMALS[np.newaxis,...], (6,1,1))
 
+
+def index_of(val, in_list):
+    """Return index of value in in_list"""
+    try:
+        return in_list.index(val)
+    except ValueError:
+        return -1 
+
+
+def merge_dict_properties(dict_original, d):
+    """Merge inner dict properties"""
+    for k in d:
+        if k in dict_original and isinstance(dict_original[k], dict):
+            dict_original[k].update(d[k])
+        else:
+            dict_original[k] = d[k]
+    
+    return dict_original
+
+
 def load(context,
          filepath,
          import_uvs = True,               # import face uvs
          translate_origin_by_8 = False,   # shift model by (-8, -8, -8)
          recenter_to_origin = True,       # recenter model to origin, overrides translate origin
          **kwargs):
-    
+    """Main import function"""
+
     with open(filepath, "r") as f:
         data = json.load(f)
 
+    # check if parent exists, need to merge data into parent
+    if "parent" in data:
+        # build stack of data dicts, then write backwards:
+        # data_hierarchy = [this, parent1, parent2, ...]
+        data_hierarchy = [data]
+        curr_data = data
+
+        # chunks of import file path, to get base directory
+        filepath_parts = filepath.split(os.path.sep)
+        
+        # in case circular dependency...
+        curr_level = 0
+        MAX_PARENT_LEVEL = 10
+
+        while True:
+            # parent path without namespacing, e.g. "minecraft:block/cobblestone" -> "block/cobblestone"
+            parent_path = curr_data["parent"].split(":")[-1]
+            parent_path_chunks = os.path.split(parent_path)
+            
+            # match base path
+            idx_base_path = index_of(parent_path_chunks[0], filepath_parts)            
+            filepath_parent = os.path.join(*filepath_parts[0:idx_base_path], parent_path + ".json")
+
+            with open(filepath_parent, "r") as f:
+                data_parent = json.load(f)
+                data_hierarchy.append(data_parent)
+                curr_data = data_parent
+
+            curr_level += 1
+
+            if "parent" not in curr_data or curr_level > MAX_PARENT_LEVEL:
+                break
+    
+        # merge together data, need to specially merge inner dict values
+        data = {}
+        for d in reversed(data_hierarchy):
+            data = merge_dict_properties(data, d)
+    
+    # main object elements
     elements = data["elements"]
 
     # check if groups in .json
